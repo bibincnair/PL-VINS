@@ -1,7 +1,7 @@
 #include "camodocal/calib/CameraCalibration.h"
 
 #include <cstdio>
-#include <eigen3/Eigen/Dense>
+#include <Eigen/Dense>
 #include <iomanip>
 #include <iostream>
 #include <algorithm>
@@ -9,7 +9,8 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/core/eigen.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
-#include <opencv2/calib3d/calib3d.hpp>
+#include <opencv2/calib.hpp>
+#include <opencv2/geometry.hpp>
 
 #include "camodocal/camera_models/CameraFactory.h"
 #include "camodocal/sparse_graph/Transform.h"
@@ -232,7 +233,7 @@ CameraCalibration::drawResults(std::vector<cv::Mat>& images) const
         cv::Mat& image = images.at(i);
         if (image.channels() == 1)
         {
-            cv::cvtColor(image, image, CV_GRAY2RGB);
+            cv::cvtColor(image, image, cv::COLOR_GRAY2RGB);
         }
 
         std::vector<cv::Point2f> estImagePoints;
@@ -250,12 +251,12 @@ CameraCalibration::drawResults(std::vector<cv::Mat>& images) const
             cv::circle(image,
                        cv::Point(cvRound(pObs.x * drawMultiplier),
                                  cvRound(pObs.y * drawMultiplier)),
-                       5, green, 2, CV_AA, drawShiftBits);
+                       5, green, 2, cv::LINE_AA, drawShiftBits);
 
             cv::circle(image,
                        cv::Point(cvRound(pEst.x * drawMultiplier),
                                  cvRound(pEst.y * drawMultiplier)),
-                       5, red, 2, CV_AA, drawShiftBits);
+                       5, red, 2, cv::LINE_AA, drawShiftBits);
 
             float error = cv::norm(pObs - pEst);
 
@@ -272,7 +273,7 @@ CameraCalibration::drawResults(std::vector<cv::Mat>& images) const
 
         cv::putText(image, oss.str(), cv::Point(10, image.rows - 10),
                     cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(255, 255, 255),
-                    1, CV_AA);
+                    1, cv::LINE_AA);
     }
 }
 
@@ -504,10 +505,10 @@ CameraCalibration::optimize(CameraPtr& camera,
                                      transformVec.at(i).translationData());
         }
 
-        ceres::LocalParameterization* quaternionParameterization =
+        ceres::Manifold* quaternionParameterization =
             new EigenQuaternionParameterization;
 
-        problem.SetParameterization(transformVec.at(i).rotationData(),
+        problem.SetManifold(transformVec.at(i).rotationData(),
                                     quaternionParameterization);
     }
 

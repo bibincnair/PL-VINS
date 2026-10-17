@@ -1,1 +1,1 @@
-rosrun camera_model Calibration -w 8 -h 11 -s 70 -i ~/bag/PX/calib/
+ros2 run camera_model camera_calibration /path/to/calibration/images --width=8 --height=11 --size=70

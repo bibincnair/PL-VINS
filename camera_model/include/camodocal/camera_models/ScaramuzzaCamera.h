@@ -147,8 +147,8 @@ private:
     double m_inv_scale;
 };
 
-typedef boost::shared_ptr<OCAMCamera> OCAMCameraPtr;
-typedef boost::shared_ptr<const OCAMCamera> OCAMCameraConstPtr;
+typedef std::shared_ptr<OCAMCamera> OCAMCameraPtr;
+typedef std::shared_ptr<const OCAMCamera> OCAMCameraConstPtr;
 
 template <typename T>
 void

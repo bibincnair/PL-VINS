@@ -13,14 +13,14 @@
 namespace camodocal
 {
 
-boost::shared_ptr<CameraFactory> CameraFactory::m_instance;
+std::shared_ptr<CameraFactory> CameraFactory::m_instance;
 
 CameraFactory::CameraFactory()
 {
 
 }
 
-boost::shared_ptr<CameraFactory>
+std::shared_ptr<CameraFactory>
 CameraFactory::instance(void)
 {
     if (m_instance.get() == 0)

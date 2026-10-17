@@ -1,15 +1,16 @@
-part of [camodocal](https://github.com/hengli/camodocal)
+# Camera models and calibration
 
-[Google Ceres](http://ceres-solver.org) is needed.
+This ament package exports the camera_model library with pinhole, equidistant,
+Mei and Scaramuzza models. Build it as part of the workspace using the pinned
+OpenCV 5, Eigen 5 and Ceres dependencies described in the repository README.
 
-# Calibration:
+The calibration executable uses OpenCV command-line parsing and standard C++
+filesystem support:
 
-Use [intrinsic_calib.cc](https://github.com/dvorak0/camera_model/blob/master/src/intrinsic_calib.cc) to calibrate your camera.
+```bash
+ros2 run camera_model camera_calibration --help
+ros2 run camera_model camera_calibration calibrationdata --camera-model=pinhole
+```
 
-# Undistortion:
-
-See [Camera.h](https://github.com/dvorak0/camera_model/blob/master/include/camodocal/camera_models/Camera.h) for general interface: 
-
- - liftProjective: Lift points from the image plane to the projective space.
- - spaceToPlane: Projects 3D points to the image plane (Pi function)
-
+Images are processed without a GUI by default. Use --view-results=true with an
+OpenCV build that has a GUI backend to view detected corners and reprojections.

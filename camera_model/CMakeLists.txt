@@ -1,67 +1,24 @@
-cmake_minimum_required(VERSION 2.8.3)
-project(camera_model)
-
-set(CMAKE_BUILD_TYPE "Release")
-set(CMAKE_CXX_FLAGS "-std=c++11")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -fPIC")
-
-find_package(catkin REQUIRED COMPONENTS
-    roscpp
-    std_msgs
-    )
-
-find_package(Boost REQUIRED COMPONENTS filesystem program_options system)
-include_directories(${Boost_INCLUDE_DIRS})
-
-find_package(OpenCV REQUIRED)
-
-# set(EIGEN_INCLUDE_DIR "/usr/local/include/eigen3")
-find_package(Ceres REQUIRED)
-include_directories(${CERES_INCLUDE_DIRS})
-
-
-catkin_package(
-    INCLUDE_DIRS include
-    LIBRARIES camera_model
-    CATKIN_DEPENDS roscpp std_msgs
-#    DEPENDS system_lib
-    )
-
-include_directories(
-    ${catkin_INCLUDE_DIRS}
-    )
-
-include_directories("include")
-
-
-# add_executable(Calibration 
-#     src/intrinsic_calib.cc
-#     src/chessboard/Chessboard.cc
-#     src/calib/CameraCalibration.cc
-#     src/camera_models/Camera.cc
-#     src/camera_models/CameraFactory.cc
-#     src/camera_models/CostFunctionFactory.cc
-#     src/camera_models/PinholeCamera.cc
-#     src/camera_models/CataCamera.cc
-#     src/camera_models/EquidistantCamera.cc
-#     src/camera_models/ScaramuzzaCamera.cc
-#     src/sparse_graph/Transform.cc
-#     src/gpl/gpl.cc
-#     src/gpl/EigenQuaternionParameterization.cc)
-
-add_library(camera_model
-    src/chessboard/Chessboard.cc
-    src/calib/CameraCalibration.cc
-    src/camera_models/Camera.cc
-    src/camera_models/CameraFactory.cc
-    src/camera_models/CostFunctionFactory.cc
-    src/camera_models/PinholeCamera.cc
-    src/camera_models/CataCamera.cc
-    src/camera_models/EquidistantCamera.cc
-    src/camera_models/ScaramuzzaCamera.cc
-    src/sparse_graph/Transform.cc
-    src/gpl/gpl.cc
-    src/gpl/EigenQuaternionParameterization.cc)
-
-# target_link_libraries(Calibration ${Boost_LIBRARIES} ${OpenCV_LIBS} ${CERES_LIBRARIES})
-target_link_libraries(camera_model ${Boost_LIBRARIES} ${OpenCV_LIBS} ${CERES_LIBRARIES})
+cmake_minimum_required(VERSION 3.22)
+project(camera_model VERSION 0.1.0 LANGUAGES CXX)
+include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/Dependencies.cmake)
+find_package(ament_cmake REQUIRED)
+find_package(OpenCV 5.0.0 EXACT REQUIRED COMPONENTS core imgproc calib geometry highgui imgcodecs objdetect)
+find_package(Ceres 2.2.0 EXACT REQUIRED)
+file(GLOB sources CONFIGURE_DEPENDS src/camera_models/*.cc)
+add_library(camera_model SHARED ${sources} src/chessboard/Chessboard.cc src/calib/CameraCalibration.cc src/sparse_graph/Transform.cc src/gpl/gpl.cc src/gpl/EigenQuaternionParameterization.cc)
+target_include_directories(camera_model PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include> ${PLVINS_DEPENDENCY_PREFIX}/include)
+target_link_libraries(camera_model Eigen3::Eigen Ceres::ceres ${OpenCV_LIBS})
+install(TARGETS camera_model EXPORT export_camera_model LIBRARY DESTINATION lib ARCHIVE DESTINATION lib)
+install(DIRECTORY include/ DESTINATION include)
+ament_export_targets(export_camera_model HAS_LIBRARY_TARGET)
+ament_export_dependencies(Eigen3 Ceres OpenCV)
+add_executable(camera_calibration src/intrinsic_calib.cc)
+target_link_libraries(camera_calibration camera_model)
+install(TARGETS camera_calibration DESTINATION lib/${PROJECT_NAME})
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(camera_model_test test/camera_model_test.cpp)
+  target_link_libraries(camera_model_test camera_model)
+  target_compile_definitions(camera_model_test PRIVATE PLVINS_TEST_CALIBRATION="${CMAKE_CURRENT_SOURCE_DIR}/../config/euroc/euroc_config_fix_extrinsic.yaml")
+endif()
+ament_package()

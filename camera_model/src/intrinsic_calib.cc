@@ -1,6 +1,6 @@
 #include <boost/algorithm/string.hpp>
-#include <boost/filesystem.hpp>
-#include <boost/program_options.hpp>
+#include <filesystem>
+
 #include <iomanip>
 #include <iostream>
 #include <algorithm>
@@ -14,51 +14,33 @@
 
 int main(int argc, char** argv)
 {
-    cv::Size boardSize;
-    float squareSize;
-    std::string inputDir;
-    std::string cameraModel;
-    std::string cameraName;
-    std::string prefix;
-    std::string fileExtension;
-    bool useOpenCV;
-    bool viewResults;
-    bool verbose;
-
-    //========= Handling Program options =========
-    boost::program_options::options_description desc("Allowed options");
-    desc.add_options()
-        ("help", "produce help message")
-        ("width,w", boost::program_options::value<int>(&boardSize.width)->default_value(8), "Number of inner corners on the chessboard pattern in x direction")
-        ("height,h", boost::program_options::value<int>(&boardSize.height)->default_value(12), "Number of inner corners on the chessboard pattern in y direction")
-        ("size,s", boost::program_options::value<float>(&squareSize)->default_value(7.f), "Size of one square in mm")
-        ("input,i", boost::program_options::value<std::string>(&inputDir)->default_value("calibrationdata"), "Input directory containing chessboard images")
-        ("prefix,p", boost::program_options::value<std::string>(&prefix)->default_value("left-"), "Prefix of images")
-        ("file-extension,e", boost::program_options::value<std::string>(&fileExtension)->default_value(".png"), "File extension of images")
-        ("camera-model", boost::program_options::value<std::string>(&cameraModel)->default_value("mei"), "Camera model: kannala-brandt | mei | pinhole")
-        ("camera-name", boost::program_options::value<std::string>(&cameraName)->default_value("camera"), "Name of camera")
-        ("opencv", boost::program_options::bool_switch(&useOpenCV)->default_value(true), "Use OpenCV to detect corners")
-        ("view-results", boost::program_options::bool_switch(&viewResults)->default_value(false), "View results")
-        ("verbose,v", boost::program_options::bool_switch(&verbose)->default_value(true), "Verbose output")
-        ;
-
-    boost::program_options::positional_options_description pdesc;
-    pdesc.add("input", 1);
-
-    boost::program_options::variables_map vm;
-    boost::program_options::store(boost::program_options::command_line_parser(argc, argv).options(desc).positional(pdesc).run(), vm);
-    boost::program_options::notify(vm);
-
-    if (vm.count("help"))
-    {
-        std::cout << desc << std::endl;
-        return 1;
+    cv::CommandLineParser parser(argc, argv,
+        "{help ? | | Print help}"
+        "{@input | calibrationdata | Input image directory}"
+        "{width w | 8 | Chessboard inner corners in x}"
+        "{height h | 12 | Chessboard inner corners in y}"
+        "{size s | 7 | Square size in mm}"
+        "{prefix p | left- | Image filename prefix}"
+        "{file-extension e | .png | Image extension}"
+        "{camera-model | mei | kannala-brandt, mei, pinhole or scaramuzza}"
+        "{camera-name | camera | Camera name and output prefix}"
+        "{opencv | true | Use OpenCV corner detection}"
+        "{view-results | false | Display calibration images}"
+        "{verbose v | true | Print progress}");
+    if (parser.has("help")) { parser.printMessage(); return 0; }
+    const cv::Size boardSize(parser.get<int>("width"), parser.get<int>("height"));
+    const float squareSize=parser.get<float>("size");
+    const auto inputDir=parser.get<std::string>("@input");
+    const auto cameraModel=parser.get<std::string>("camera-model");
+    const auto cameraName=parser.get<std::string>("camera-name");
+    const auto prefix=parser.get<std::string>("prefix");
+    const auto fileExtension=parser.get<std::string>("file-extension");
+    const bool useOpenCV=parser.get<bool>("opencv"), viewResults=parser.get<bool>("view-results"), verbose=parser.get<bool>("verbose");
+    if (!parser.check() || boardSize.width<2 || boardSize.height<2 || squareSize<=0) {
+        parser.printErrors(); return 1;
     }
-
-    if (!boost::filesystem::exists(inputDir) && !boost::filesystem::is_directory(inputDir))
-    {
-        std::cerr << "# ERROR: Cannot find input directory " << inputDir << "." << std::endl;
-        return 1;
+    if (!std::filesystem::is_directory(inputDir)) {
+        std::cerr << "Cannot find input directory: " << inputDir << std::endl; return 1;
     }
 
     camodocal::Camera::ModelType modelType;
@@ -102,10 +84,9 @@ int main(int argc, char** argv)
 
     // look for images in input directory
     std::vector<std::string> imageFilenames;
-    boost::filesystem::directory_iterator itr;
-    for (boost::filesystem::directory_iterator itr(inputDir); itr != boost::filesystem::directory_iterator(); ++itr)
+    for (std::filesystem::directory_iterator itr(inputDir); itr != std::filesystem::directory_iterator(); ++itr)
     {
-        if (!boost::filesystem::is_regular_file(itr->status()))
+        if (!std::filesystem::is_regular_file(itr->status()))
         {
             continue;
         }
@@ -122,7 +103,7 @@ int main(int argc, char** argv)
         }
 
         // check if file extension matches
-        if (filename.compare(filename.length() - fileExtension.length(), fileExtension.length(), fileExtension) != 0)
+        if (filename.size()<fileExtension.size() || filename.compare(filename.length() - fileExtension.length(), fileExtension.length(), fileExtension) != 0)
         {
             continue;
         }
@@ -149,6 +130,7 @@ int main(int argc, char** argv)
     std::sort(imageFilenames.begin(), imageFilenames.end());
 
     cv::Mat image = cv::imread(imageFilenames.front(), -1);
+    if (image.empty()) { std::cerr << "Cannot read first image" << std::endl; return 1; }
     const cv::Size frameSize = image.size();
 
     camodocal::CameraCalibration calibration(modelType, cameraName, frameSize, boardSize, squareSize);
@@ -159,6 +141,7 @@ int main(int argc, char** argv)
     {
         image = cv::imread(imageFilenames.at(i), -1);
 
+        if (image.empty() || image.size()!=frameSize) { std::cerr << "Inconsistent calibration image" << std::endl; return 1; }
         camodocal::Chessboard chessboard(boardSize, image);
 
         chessboard.findCorners(useOpenCV);
@@ -174,8 +157,7 @@ int main(int argc, char** argv)
             cv::Mat sketch;
             chessboard.getSketch().copyTo(sketch);
 
-            cv::imshow("Image", sketch);
-            cv::waitKey(50);
+            if (viewResults) { cv::imshow("Image", sketch); cv::waitKey(50); }
         }
         else if (verbose)
         {
@@ -183,7 +165,7 @@ int main(int argc, char** argv)
         }
         chessboardFound.at(i) = chessboard.cornersFound();
     }
-    cv::destroyWindow("Image");
+    if (viewResults) cv::destroyWindow("Image");
 
     if (calibration.sampleCount() < 10)
     {
@@ -237,7 +219,7 @@ int main(int argc, char** argv)
         {
             cv::putText(cbImages.at(i), cbImageFilenames.at(i), cv::Point(10,20),
                         cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(255, 255, 255),
-                        1, CV_AA);
+                        1, cv::LINE_AA);
             cv::imshow("Image", cbImages.at(i));
             cv::waitKey(0);
         }

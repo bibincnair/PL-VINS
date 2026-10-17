@@ -1,7 +1,7 @@
 #ifndef CHESSBOARDQUAD_H
 #define CHESSBOARDQUAD_H
 
-#include <boost/shared_ptr.hpp>
+#include <memory>
 
 #include "camodocal/chessboard/ChessboardCorner.h"
 
@@ -9,7 +9,7 @@ namespace camodocal
 {
 
 class ChessboardQuad;
-typedef boost::shared_ptr<ChessboardQuad> ChessboardQuadPtr;
+typedef std::shared_ptr<ChessboardQuad> ChessboardQuadPtr;
 
 class ChessboardQuad
 {

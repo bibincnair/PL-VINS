@@ -2,10 +2,11 @@
 
 #include <cmath>
 #include <cstdio>
-#include <eigen3/Eigen/Dense>
+#include <Eigen/Dense>
 #include <iomanip>
 #include <iostream>
-#include <opencv2/calib3d/calib3d.hpp>
+#include <opencv2/calib.hpp>
+#include <opencv2/geometry.hpp>
 #include <opencv2/core/eigen.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 

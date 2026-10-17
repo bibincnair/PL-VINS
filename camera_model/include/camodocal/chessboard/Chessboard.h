@@ -1,7 +1,7 @@
 #ifndef CHESSBOARD_H
 #define CHESSBOARD_H
 
-#include <boost/shared_ptr.hpp>
+#include <memory>
 #include <opencv2/core/core.hpp>
 
 namespace camodocal
@@ -9,9 +9,9 @@ namespace camodocal
 
 // forward declarations
 class ChessboardCorner;
-typedef boost::shared_ptr<ChessboardCorner> ChessboardCornerPtr;
+typedef std::shared_ptr<ChessboardCorner> ChessboardCornerPtr;
 class ChessboardQuad;
-typedef boost::shared_ptr<ChessboardQuad> ChessboardQuadPtr;
+typedef std::shared_ptr<ChessboardQuad> ChessboardQuadPtr;
 
 class Chessboard
 {

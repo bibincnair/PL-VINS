@@ -1,14 +1,14 @@
 #ifndef CHESSBOARDCORNER_H
 #define CHESSBOARDCORNER_H
 
-#include <boost/shared_ptr.hpp>
+#include <memory>
 #include <opencv2/core/core.hpp>
 
 namespace camodocal
 {
 
 class ChessboardCorner;
-typedef boost::shared_ptr<ChessboardCorner> ChessboardCornerPtr;
+typedef std::shared_ptr<ChessboardCorner> ChessboardCornerPtr;
 
 class ChessboardCorner
 {
