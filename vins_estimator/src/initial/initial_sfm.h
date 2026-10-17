@@ -65,7 +65,7 @@ public:
 private:
 	bool solveFrameByPnP(Matrix3d &R_initial, Vector3d &P_initial, int i, vector<SFMFeature> &sfm_f);
 
-	void triangulatePoint(Eigen::Matrix<double, 3, 4> &Pose0, Eigen::Matrix<double, 3, 4> &Pose1,
+	bool triangulatePoint(Eigen::Matrix<double, 3, 4> &Pose0, Eigen::Matrix<double, 3, 4> &Pose1,
 							Vector2d &point0, Vector2d &point1, Vector3d &point_3d);
 	void triangulateTwoFrames(int frame0, Eigen::Matrix<double, 3, 4> &Pose0, 
 							  int frame1, Eigen::Matrix<double, 3, 4> &Pose1,

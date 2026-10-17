@@ -6,6 +6,7 @@
 #include "../vins_estimator/src/factor/line_projection_factor.h"
 #include "../vins_estimator/src/factor/marginalization_factor.h"
 #include "../vins_estimator/src/factor/imu_factor.h"
+#include "../vins_estimator/src/feature_manager.h"
 
 namespace {
 void checkManifold(const ceres::Manifold& manifold, const std::vector<double>& x) {
@@ -128,4 +129,15 @@ TEST(Initialization,RelativePoseUsesUpstreamOpenCv) {
   ASSERT_TRUE(estimator.solveRelativeRT(correspondences,result,translation));
   EXPECT_LT((result-R.transpose()).norm(),1e-3);
   EXPECT_GT(translation.normalized().dot((-R.transpose()*t).normalized()),.99);
+}
+TEST(FeatureManager,ClearStateRemovesPointAndLineTracks) {
+  Eigen::Matrix3d rotations[NUM_OF_CAM];
+  FeatureManager manager(rotations);
+  manager.feature.emplace_back(7,0);
+  manager.linefeature.emplace_back(11,0);
+
+  manager.clearState();
+
+  EXPECT_TRUE(manager.feature.empty());
+  EXPECT_TRUE(manager.linefeature.empty());
 }

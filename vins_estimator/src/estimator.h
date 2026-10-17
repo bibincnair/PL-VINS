@@ -132,6 +132,7 @@ class Estimator
     bool first_imu;
     bool is_valid, is_key;
     bool failure_occur;
+    int low_feature_frame_count = 0;
 
     vector<Vector3d> point_cloud;
     vector<Vector3d> margin_cloud;

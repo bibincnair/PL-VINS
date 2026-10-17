@@ -74,6 +74,7 @@ void Estimator::clearState()
     f_manager.clearState();
 
     failure_occur = 0;
+    low_feature_frame_count = 0;
     relocalization_info = 0;
 
     drift_correct_r = Matrix3d::Identity();
@@ -323,6 +324,8 @@ void Estimator::processImage(const map<int, vector<pair<int, Vector3d>>> &image,
 
     RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "new image coming ------------------------------------------");
     RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "Adding feature points %lu", image.size());
+    const int last_observed_frame = solver_flag == INITIAL ? frame_count - 1 : WINDOW_SIZE;
+    f_manager.removeInvalidTracks(last_observed_frame);
     //if (f_manager.addFeatureCheckParallax(frame_count, image))           // 当视差较大时，marg 老的关键帧
     if(f_manager.addFeatureCheckParallax(frame_count, image, lines))       // 对检测到的特征进行存放处理
         marginalization_flag = MARGIN_OLD;
@@ -423,6 +426,8 @@ void Estimator::processImage(const map<int, vector<pair<int, Vector3d>>> &image,
 {
     RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "new image coming ------------------------------------------");
     RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "Adding feature points %lu", image.size());
+    const int last_observed_frame = solver_flag == INITIAL ? frame_count - 1 : WINDOW_SIZE;
+    f_manager.removeInvalidTracks(last_observed_frame);
     if (f_manager.addFeatureCheckParallax(frame_count, image))           // 当视差较大时，marg 老的关键帧
         marginalization_flag = MARGIN_OLD;
     else                                                                 // 当视差较小时，比如静止，marg 新的图像帧
@@ -720,7 +725,7 @@ bool Estimator::visualInitialAlign()
     for (auto &it_per_id : f_manager.feature)
     {
         it_per_id.used_num = it_per_id.feature_per_frame.size();
-        if (!(it_per_id.used_num >= 2 && it_per_id.start_frame < WINDOW_SIZE - 2))
+        if (!(it_per_id.used_num >= 2 && it_per_id.start_frame < WINDOW_SIZE - 2 && it_per_id.hasValidWindow()))
             continue;
         it_per_id.estimated_depth *= s;
     }
@@ -1065,9 +1070,15 @@ bool Estimator::failureDetection()
 {
     if (f_manager.last_track_num < 2)
     {
-        RCLCPP_INFO(rclcpp::get_logger("plvins"), " little feature %d", f_manager.last_track_num);
-        return true;
+        ++low_feature_frame_count;
+        RCLCPP_INFO(rclcpp::get_logger("plvins"),
+            "Low point-track count %d on consecutive frame %d/3",
+            f_manager.last_track_num, low_feature_frame_count);
+        if (low_feature_frame_count >= 3)
+            return true;
     }
+    else
+        low_feature_frame_count = 0;
     if (Bas[WINDOW_SIZE].norm() > 2.5)
     {
         RCLCPP_INFO(rclcpp::get_logger("plvins"), " big IMU acc bias estimation %f", Bas[WINDOW_SIZE].norm());
@@ -1133,13 +1144,39 @@ void  Estimator::onlyLineOpt()
     }
     vector2double();// 将那些保存在 vector向量里的参数 移到 double指针数组里去
 
+    int line_parameter_index = -1;
+    bool invalid_line_parameter = false;
+    for (auto &it_per_id : f_manager.linefeature)
+    {
+        it_per_id.used_num = it_per_id.linefeature_per_frame.size();
+        if (!(it_per_id.used_num >= LINE_MIN_OBS && it_per_id.start_frame < WINDOW_SIZE - 2 && it_per_id.is_triangulation && it_per_id.hasValidWindow()))
+            continue;
+        ++line_parameter_index;
+        const Eigen::Map<const Vector4d> line(para_LineFeature[line_parameter_index]);
+        if (!line.allFinite() || std::abs(std::cos(line[1])) < 1e-10)
+        {
+            const Vector6d &plucker = it_per_id.line_plucker;
+            RCLCPP_ERROR_STREAM(rclcpp::get_logger("plvins"),
+                "Skipping invalid line before line-only optimization: id=" << it_per_id.feature_id
+                << " orth=" << line.transpose() << " plucker=" << plucker.transpose());
+            it_per_id.is_triangulation = false;
+            invalid_line_parameter = true;
+        }
+    }
+    if (invalid_line_parameter)
+    {
+        RCLCPP_WARN(rclcpp::get_logger("plvins"),
+            "Skipping line-only optimization because triangulated line parameters are invalid");
+        return;
+    }
+
     // 所有特征
     int f_m_cnt = 0;
     int feature_index = -1;
     for (auto &it_per_id : f_manager.linefeature)
     {
         it_per_id.used_num = it_per_id.linefeature_per_frame.size();                // 已经被多少帧观测到， 这个已经在三角化那个函数里说了
-        if (!(it_per_id.used_num >= LINE_MIN_OBS && it_per_id.start_frame < WINDOW_SIZE - 2 && it_per_id.is_triangulation))  // 如果这个特征才被观测到，那就跳过。实际上这里为啥不直接用如果特征没有三角化这个条件。
+        if (!(it_per_id.used_num >= LINE_MIN_OBS && it_per_id.start_frame < WINDOW_SIZE - 2 && it_per_id.is_triangulation && it_per_id.hasValidWindow()))
             continue;
 
         ++feature_index;            // 这个变量会记录feature在 para_Feature 里的位置， 将深度存入para_Feature时索引的记录也是用的这种方式
@@ -1153,9 +1190,23 @@ void  Estimator::onlyLineOpt()
         problem.AddParameterBlock( para_LineFeature[feature_index], SIZE_LINE, local_parameterization_line);  // p,q
 
         int imu_i = it_per_id.start_frame,imu_j = imu_i - 1;
+        if (imu_i < 0 || imu_i > WINDOW_SIZE)
+        {
+            RCLCPP_ERROR(rclcpp::get_logger("plvins"),
+                "Skipping line feature %d with invalid start frame %d",
+                it_per_id.feature_id, imu_i);
+            continue;
+        }
         for (auto &it_per_frame : it_per_id.linefeature_per_frame)
         {
             imu_j++;
+            if (imu_j < 0 || imu_j > WINDOW_SIZE)
+            {
+                RCLCPP_ERROR(rclcpp::get_logger("plvins"),
+                    "Skipping out-of-window observation for line feature %d: frame=%d start=%d observations=%zu",
+                    it_per_id.feature_id, imu_j, imu_i, it_per_id.linefeature_per_frame.size());
+                break;
+            }
             if (imu_i == imu_j)
             {
                 //continue;
@@ -1267,7 +1318,7 @@ void  Estimator::LineBA()
     for (auto &it_per_id : f_manager.linefeature)
     {
         it_per_id.used_num = it_per_id.linefeature_per_frame.size();                // 已经被多少帧观测到， 这个已经在三角化那个函数里说了
-        if (!(it_per_id.used_num >= LINE_MIN_OBS && it_per_id.start_frame < WINDOW_SIZE - 2 && it_per_id.is_triangulation))  // 如果这个特征才被观测到，那就跳过。实际上这里为啥不直接用如果特征没有三角化这个条件。
+        if (!(it_per_id.used_num >= LINE_MIN_OBS && it_per_id.start_frame < WINDOW_SIZE - 2 && it_per_id.is_triangulation && it_per_id.hasValidWindow()))
             continue;
 
         ++linefeature_index;            // 这个变量会记录feature在 para_Feature 里的位置， 将深度存入para_Feature时索引的记录也是用的这种方式
@@ -1394,7 +1445,7 @@ void  Estimator::LineBAincamera()
     for (auto &it_per_id : f_manager.linefeature)
     {
         it_per_id.used_num = it_per_id.linefeature_per_frame.size();                // 已经被多少帧观测到， 这个已经在三角化那个函数里说了
-        if (!(it_per_id.used_num >= LINE_MIN_OBS && it_per_id.start_frame < WINDOW_SIZE - 2 && it_per_id.is_triangulation))  // 如果这个特征才被观测到，那就跳过。实际上这里为啥不直接用如果特征没有三角化这个条件。
+        if (!(it_per_id.used_num >= LINE_MIN_OBS && it_per_id.start_frame < WINDOW_SIZE - 2 && it_per_id.is_triangulation && it_per_id.hasValidWindow()))
             continue;
 
         ++linefeature_index;            // 这个变量会记录feature在 para_Feature 里的位置， 将深度存入para_Feature时索引的记录也是用的这种方式
@@ -1518,18 +1569,32 @@ void Estimator::optimizationwithLine()
     for (auto &it_per_id : f_manager.feature)
     {
         it_per_id.used_num = it_per_id.feature_per_frame.size();                // 已经被多少帧观测到， 这个已经在三角化那个函数里说了
-        if (!(it_per_id.used_num >= 2 && it_per_id.start_frame < WINDOW_SIZE - 2))  // 如果这个特征才被观测到，那就跳过。实际上这里为啥不直接用如果特征没有三角化这个条件。
+        if (!(it_per_id.used_num >= 2 && it_per_id.start_frame < WINDOW_SIZE - 2 && it_per_id.hasValidWindow()))
             continue;
 
         ++feature_index;                     // 这个变量会记录feature在 para_Feature 里的位置， 将深度存入para_Feature时索引的记录也是用的这种方式
 
         int imu_i = it_per_id.start_frame, imu_j = imu_i - 1;
+        if (imu_i < 0 || imu_i > WINDOW_SIZE)
+        {
+            RCLCPP_ERROR(rclcpp::get_logger("plvins"),
+                "Skipping point feature %d with invalid start frame %d",
+                it_per_id.feature_id, imu_i);
+            continue;
+        }
 
         Vector3d pts_i = it_per_id.feature_per_frame[0].point;            // 图像上第一次观测到这个特征的坐标
 
         for (auto &it_per_frame : it_per_id.feature_per_frame)
         {
             imu_j++;
+            if (imu_j < 0 || imu_j > WINDOW_SIZE)
+            {
+                RCLCPP_ERROR(rclcpp::get_logger("plvins"),
+                    "Skipping out-of-window observation for point feature %d: frame=%d start=%d observations=%zu",
+                    it_per_id.feature_id, imu_j, imu_i, it_per_id.feature_per_frame.size());
+                break;
+            }
             if (imu_i == imu_j)
             {
                 continue;
@@ -1547,18 +1612,33 @@ void Estimator::optimizationwithLine()
     for (auto &it_per_id : f_manager.linefeature)
     {
         it_per_id.used_num = it_per_id.linefeature_per_frame.size();                // 已经被多少帧观测到， 这个已经在三角化那个函数里说了
-        if (!(it_per_id.used_num >= LINE_MIN_OBS && it_per_id.start_frame < WINDOW_SIZE - 2 && it_per_id.is_triangulation))  // 如果这个特征才被观测到，那就跳过。实际上这里为啥不直接用如果特征没有三角化这个条件。
+        if (!(it_per_id.used_num >= LINE_MIN_OBS && it_per_id.start_frame < WINDOW_SIZE - 2 && it_per_id.is_triangulation && it_per_id.hasValidWindow()))
             continue;
 
         ++linefeature_index;            // 这个变量会记录feature在 para_Feature 里的位置， 将深度存入para_Feature时索引的记录也是用的这种方式
 
+        int imu_i = it_per_id.start_frame,imu_j = imu_i - 1;
+        if (imu_i < 0 || imu_i > WINDOW_SIZE)
+        {
+            RCLCPP_ERROR(rclcpp::get_logger("plvins"),
+                "Skipping line feature %d with invalid start frame %d",
+                it_per_id.feature_id, imu_i);
+            continue;
+        }
+
         ceres::Manifold *local_parameterization_line = new LineOrthParameterization();
         problem.AddParameterBlock( para_LineFeature[linefeature_index], SIZE_LINE, local_parameterization_line);  // p,q
 
-        int imu_i = it_per_id.start_frame,imu_j = imu_i - 1;
         for (auto &it_per_frame : it_per_id.linefeature_per_frame)
         {
             imu_j++;
+            if (imu_j < 0 || imu_j > WINDOW_SIZE)
+            {
+                RCLCPP_ERROR(rclcpp::get_logger("plvins"),
+                    "Skipping out-of-window observation for line feature %d: frame=%d start=%d observations=%zu",
+                    it_per_id.feature_id, imu_j, imu_i, it_per_id.linefeature_per_frame.size());
+                break;
+            }
             if (imu_i == imu_j)
             {
                 //continue;
@@ -1596,7 +1676,7 @@ void Estimator::optimizationwithLine()
         for (auto &it_per_id : f_manager.feature)
         {
             it_per_id.used_num = it_per_id.feature_per_frame.size();
-            if (!(it_per_id.used_num >= 2 && it_per_id.start_frame < WINDOW_SIZE - 2))
+            if (!(it_per_id.used_num >= 2 && it_per_id.start_frame < WINDOW_SIZE - 2 && it_per_id.hasValidWindow()))
                 continue;
             ++feature_index;
             int start = it_per_id.start_frame;
@@ -1780,7 +1860,7 @@ void Estimator::optimizationwithLine()
             for (auto &it_per_id : f_manager.feature)    // 遍历所有特征
             {
                 it_per_id.used_num = it_per_id.feature_per_frame.size();
-                if (!(it_per_id.used_num >= 2 && it_per_id.start_frame < WINDOW_SIZE - 2))
+                if (!(it_per_id.used_num >= 2 && it_per_id.start_frame < WINDOW_SIZE - 2 && it_per_id.hasValidWindow()))
                     continue;
 
                 ++feature_index;
@@ -1813,7 +1893,7 @@ void Estimator::optimizationwithLine()
             for (auto &it_per_id : f_manager.linefeature)
             {
                 it_per_id.used_num = it_per_id.linefeature_per_frame.size();                // 已经被多少帧观测到， 这个已经在三角化那个函数里说了
-                if (!(it_per_id.used_num >= LINE_MIN_OBS && it_per_id.start_frame < WINDOW_SIZE - 2 && it_per_id.is_triangulation))  // 如果这个特征才被观测到，那就跳过。实际上这里为啥不直接用如果特征没有三角化这个条件。
+                if (!(it_per_id.used_num >= LINE_MIN_OBS && it_per_id.start_frame < WINDOW_SIZE - 2 && it_per_id.is_triangulation && it_per_id.hasValidWindow()))
                     continue;
                 ++linefeature_index;            // 这个变量会记录feature在 para_Feature 里的位置， 将深度存入para_Feature时索引的记录也是用的这种方式
 
@@ -2011,7 +2091,7 @@ void Estimator::optimization()
     for (auto &it_per_id : f_manager.feature)
     {
         it_per_id.used_num = it_per_id.feature_per_frame.size();                // 已经被多少帧观测到， 这个已经在三角化那个函数里说了
-        if (!(it_per_id.used_num >= 2 && it_per_id.start_frame < WINDOW_SIZE - 2))  // 如果这个特征才被观测到，那就跳过。实际上这里为啥不直接用如果特征没有三角化这个条件。
+        if (!(it_per_id.used_num >= 2 && it_per_id.start_frame < WINDOW_SIZE - 2 && it_per_id.hasValidWindow()))
             continue;
 
         ++feature_index;                     // 这个变量会记录feature在 para_Feature 里的位置， 将深度存入para_Feature时索引的记录也是用的这种方式
@@ -2191,7 +2271,7 @@ void Estimator::optimization()
             for (auto &it_per_id : f_manager.feature)    // 遍历所有特征
             {
                 it_per_id.used_num = it_per_id.feature_per_frame.size();
-                if (!(it_per_id.used_num >= 2 && it_per_id.start_frame < WINDOW_SIZE - 2))
+                if (!(it_per_id.used_num >= 2 && it_per_id.start_frame < WINDOW_SIZE - 2 && it_per_id.hasValidWindow()))
                     continue;
 
                 ++feature_index;

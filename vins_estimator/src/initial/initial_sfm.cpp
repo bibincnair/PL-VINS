@@ -1,8 +1,10 @@
 #include "initial_sfm.h"
+#include <cmath>
+#include <rclcpp/rclcpp.hpp>
 
 GlobalSFM::GlobalSFM(){}
 
-void GlobalSFM::triangulatePoint(Eigen::Matrix<double, 3, 4> &Pose0, Eigen::Matrix<double, 3, 4> &Pose1,
+bool GlobalSFM::triangulatePoint(Eigen::Matrix<double, 3, 4> &Pose0, Eigen::Matrix<double, 3, 4> &Pose1,
 						Vector2d &point0, Vector2d &point1, Vector3d &point_3d)
 {
 	Matrix4d design_matrix = Matrix4d::Zero();
@@ -13,9 +15,20 @@ void GlobalSFM::triangulatePoint(Eigen::Matrix<double, 3, 4> &Pose0, Eigen::Matr
 	Vector4d triangulated_point;
 	triangulated_point =
 		      design_matrix.jacobiSvd(Eigen::ComputeFullV).matrixV().rightCols<1>();
-	point_3d(0) = triangulated_point(0) / triangulated_point(3);
-	point_3d(1) = triangulated_point(1) / triangulated_point(3);
-	point_3d(2) = triangulated_point(2) / triangulated_point(3);
+	const double homogeneous_w = triangulated_point(3);
+	if (!triangulated_point.allFinite() || std::abs(homogeneous_w) < 1e-12)
+	{
+		RCLCPP_WARN(rclcpp::get_logger("plvins"),
+			"Rejecting invalid SFM triangulation (homogeneous w=%g)", homogeneous_w);
+		return false;
+	}
+	point_3d = triangulated_point.head<3>() / homogeneous_w;
+	if (!point_3d.allFinite())
+	{
+		RCLCPP_WARN(rclcpp::get_logger("plvins"), "Rejecting non-finite SFM 3D point");
+		return false;
+	}
+	return true;
 }
 
 
@@ -57,6 +70,8 @@ bool GlobalSFM::solveFrameByPnP(Matrix3d &R_initial, Vector3d &P_initial, int i,
 	pnp_succ = cv::solvePnP(pts_3_vector, pts_2_vector, K, D, rvec, t, 1);
 	if(!pnp_succ)
 	{
+		RCLCPP_WARN(rclcpp::get_logger("plvins"),
+			"SFM PnP failed for frame %d with %zu correspondences", i, pts_2_vector.size());
 		return false;
 	}
 	cv::Rodrigues(rvec, r);
@@ -65,6 +80,12 @@ bool GlobalSFM::solveFrameByPnP(Matrix3d &R_initial, Vector3d &P_initial, int i,
 	cv::cv2eigen(r, R_pnp);
 	MatrixXd T_pnp;
 	cv::cv2eigen(t, T_pnp);
+	if (R_pnp.rows() != 3 || R_pnp.cols() != 3 || T_pnp.size() != 3 ||
+		!R_pnp.allFinite() || !T_pnp.allFinite())
+	{
+		RCLCPP_WARN(rclcpp::get_logger("plvins"), "SFM PnP returned invalid pose for frame %d", i);
+		return false;
+	}
 	R_initial = R_pnp;
 	P_initial = T_pnp;
 	return true;
@@ -99,7 +120,13 @@ void GlobalSFM::triangulateTwoFrames(int frame0, Eigen::Matrix<double, 3, 4> &Po
 		if (has_0 && has_1)
 		{
 			Vector3d point_3d;
-			triangulatePoint(Pose0, Pose1, point0, point1, point_3d);
+			if (!triangulatePoint(Pose0, Pose1, point0, point1, point_3d))
+			{
+				RCLCPP_WARN(rclcpp::get_logger("plvins"),
+					"SFM rejected feature %d triangulated between frames %d and %d",
+					sfm_f[j].id, frame0, frame1);
+				continue;
+			}
 			sfm_f[j].state = true;
 			sfm_f[j].position[0] = point_3d(0);
 			sfm_f[j].position[1] = point_3d(1);
@@ -118,6 +145,17 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 			  const Matrix3d relative_R, const Vector3d relative_T,
 			  vector<SFMFeature> &sfm_f, map<int, Vector3d> &sfm_tracked_points)
 {
+	double minimum_absolute_depth = std::numeric_limits<double>::infinity();
+	double maximum_reprojection_error = 0.0;
+	int behind_camera_observations = 0;
+	int worst_feature_id = -1;
+	int worst_frame = -1;
+	if (frame_num < 2 || l < 0 || l >= frame_num ||
+		!relative_R.allFinite() || !relative_T.allFinite())
+	{
+		RCLCPP_ERROR(rclcpp::get_logger("plvins"), "SFM received invalid frame count or relative pose");
+		return false;
+	}
 	feature_num = sfm_f.size();
 	//cout << "set 0 and " << l << " as known " << endl;
 	// have relative_r relative_t
@@ -207,7 +245,20 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 			int frame_1 = sfm_f[j].observation.back().first;
 			point1 = sfm_f[j].observation.back().second;
 			Vector3d point_3d;
-			triangulatePoint(Pose[frame_0], Pose[frame_1], point0, point1, point_3d);
+			if (frame_0 < 0 || frame_0 >= frame_num || frame_1 < 0 || frame_1 >= frame_num)
+			{
+				RCLCPP_ERROR(rclcpp::get_logger("plvins"),
+					"SFM feature %d references invalid frames %d and %d",
+					sfm_f[j].id, frame_0, frame_1);
+				return false;
+			}
+			if (!triangulatePoint(Pose[frame_0], Pose[frame_1], point0, point1, point_3d))
+			{
+				RCLCPP_WARN(rclcpp::get_logger("plvins"),
+					"SFM rejected feature %d triangulated between frames %d and %d",
+					sfm_f[j].id, frame_0, frame_1);
+				continue;
+			}
 			sfm_f[j].state = true;
 			sfm_f[j].position[0] = point_3d(0);
 			sfm_f[j].position[1] = point_3d(1);
@@ -229,6 +280,74 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 		cout << "solvePnP  t" << " i " << i <<"  " << t_tmp.x() <<"  "<< t_tmp.y() <<"  "<< t_tmp.z() << endl;
 	}
 */
+	int tracked_point_count = 0;
+	for (int i = 0; i < frame_num; i++)
+	{
+		const double quaternion_norm = c_Quat[i].norm();
+		if (!c_Quat[i].coeffs().allFinite() || !c_Translation[i].allFinite() ||
+			!std::isfinite(quaternion_norm) || std::abs(quaternion_norm - 1.0) > 1e-3)
+		{
+			RCLCPP_ERROR_STREAM(rclcpp::get_logger("plvins"),
+				"Invalid SFM camera pose before bundle adjustment: frame=" << i
+				<< " quaternion=" << c_Quat[i].coeffs().transpose()
+				<< " norm=" << quaternion_norm
+				<< " translation=" << c_Translation[i].transpose());
+			return false;
+		}
+	}
+	for (const auto &feature : sfm_f)
+	{
+		if (feature.state)
+		{
+			const Vector3d point(feature.position[0], feature.position[1], feature.position[2]);
+			if (!point.allFinite())
+			{
+				RCLCPP_ERROR(rclcpp::get_logger("plvins"),
+					"Invalid SFM point before bundle adjustment: feature=%d", feature.id);
+				return false;
+			}
+			tracked_point_count++;
+			for (const auto &observation : feature.observation)
+			{
+				const int frame = observation.first;
+				if (frame < 0 || frame >= frame_num)
+				{
+					RCLCPP_ERROR(rclcpp::get_logger("plvins"),
+						"SFM feature %d references invalid frame %d", feature.id, frame);
+					return false;
+				}
+				const Vector3d camera_point = c_Quat[frame] * point + c_Translation[frame];
+				if (!camera_point.allFinite())
+				{
+					RCLCPP_ERROR(rclcpp::get_logger("plvins"),
+						"SFM projection is non-finite: feature=%d frame=%d", feature.id, frame);
+					return false;
+				}
+				const double depth = camera_point.z();
+				minimum_absolute_depth = std::min(minimum_absolute_depth, std::abs(depth));
+				behind_camera_observations += depth < 0.0;
+				if (std::abs(depth) < 1e-6)
+				{
+					RCLCPP_ERROR(rclcpp::get_logger("plvins"),
+						"SFM projection has near-zero depth: feature=%d frame=%d depth=%g",
+						feature.id, frame, depth);
+					return false;
+				}
+				const Vector2d residual = camera_point.head<2>() / depth - observation.second;
+				if (residual.norm() > maximum_reprojection_error)
+				{
+					maximum_reprojection_error = residual.norm();
+					worst_feature_id = feature.id;
+					worst_frame = frame;
+				}
+			}
+		}
+	}
+	RCLCPP_INFO(rclcpp::get_logger("plvins"),
+		"Starting SFM bundle adjustment: frames=%d tracked_points=%d min_abs_depth=%g "
+		"behind_camera_observations=%d max_reprojection_error=%g worst_feature=%d worst_frame=%d",
+		frame_num, tracked_point_count, minimum_absolute_depth, behind_camera_observations,
+		maximum_reprojection_error, worst_feature_id, worst_frame);
 	//full BA
 	ceres::Problem problem;
 	ceres::Manifold* local_parameterization = new ceres::QuaternionManifold();
@@ -262,6 +381,12 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 		for (int j = 0; j < int(sfm_f[i].observation.size()); j++)
 		{
 			int l = sfm_f[i].observation[j].first;
+			if (l < 0 || l >= frame_num)
+			{
+				RCLCPP_ERROR(rclcpp::get_logger("plvins"),
+					"SFM feature %d references invalid frame %d", sfm_f[i].id, l);
+				return false;
+			}
 			ceres::CostFunction* cost_function = ReprojectionError3D::Create(
 												sfm_f[i].observation[j].second.x(),
 												sfm_f[i].observation[j].second.y());
@@ -284,6 +409,8 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 	}
 	else
 	{
+		RCLCPP_WARN(rclcpp::get_logger("plvins"), "SFM bundle adjustment failed: %s",
+			summary.BriefReport().c_str());
 		//cout << "vision only BA not converge " << endl;
 		return false;
 	}

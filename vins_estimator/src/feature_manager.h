@@ -71,6 +71,11 @@ class FeaturePerId
     }
 
     int endFrame();
+    bool hasValidWindow(int last_frame = WINDOW_SIZE) const
+    {
+        return !feature_per_frame.empty() && start_frame >= 0 && start_frame <= last_frame &&
+               feature_per_frame.size() <= static_cast<size_t>(last_frame - start_frame + 1);
+    }
 };
 
 class lineFeaturePerFrame
@@ -133,6 +138,11 @@ public:
     }
 
     int endFrame();
+    bool hasValidWindow(int last_frame = WINDOW_SIZE) const
+    {
+        return !linefeature_per_frame.empty() && start_frame >= 0 && start_frame <= last_frame &&
+               linefeature_per_frame.size() <= static_cast<size_t>(last_frame - start_frame + 1);
+    }
 };
 class FeatureManager
 {
@@ -142,6 +152,7 @@ class FeatureManager
     void setRic(Matrix3d _ric[]);
 
     void clearState();
+    size_t removeInvalidTracks(int last_frame);
 
     int getFeatureCount();
     int getLineFeatureCount();

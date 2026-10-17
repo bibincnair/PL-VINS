@@ -1,6 +1,7 @@
 #include "line_parameterization.h"
 #include <Eigen/Geometry>
 #include <cmath>
+#include <rclcpp/rclcpp.hpp>
 namespace {
 Eigen::Matrix3d rotation(const double* x) {
   return (Eigen::AngleAxisd(x[2], Eigen::Vector3d::UnitZ()) *
@@ -10,6 +11,17 @@ Eigen::Matrix3d rotation(const double* x) {
 double wrap(double x) { return std::atan2(std::sin(x), std::cos(x)); }
 }
 bool LineOrthParameterization::Plus(const double* x, const double* d, double* out) const {
+  for (int i = 0; i < 4; ++i) {
+    if (!std::isfinite(x[i]) || !std::isfinite(d[i])) {
+      RCLCPP_ERROR(rclcpp::get_logger("plvins"),
+        "Line manifold received non-finite state or increment at component %d", i);
+      return false;
+    }
+  }
+  if (!std::isfinite(x[3] + d[3])) {
+    RCLCPP_ERROR(rclcpp::get_logger("plvins"), "Line manifold angle update overflowed");
+    return false;
+  }
   Eigen::Matrix3d R = rotation(x) *
     (Eigen::AngleAxisd(d[0], Eigen::Vector3d::UnitX()) *
      Eigen::AngleAxisd(d[1], Eigen::Vector3d::UnitY()) *
@@ -18,10 +30,28 @@ bool LineOrthParameterization::Plus(const double* x, const double* d, double* ou
   out[1] = std::atan2(-R(2,0), std::hypot(R(0,0), R(1,0)));
   out[2] = std::atan2(R(1,0), R(0,0));
   out[3] = wrap(x[3] + d[3]);
+  for (int i = 0; i < 4; ++i) {
+    if (!std::isfinite(out[i])) {
+      RCLCPP_ERROR(rclcpp::get_logger("plvins"),
+        "Line manifold produced non-finite output at component %d", i);
+      return false;
+    }
+  }
   return true;
 }
 bool LineOrthParameterization::PlusJacobian(const double* x, double* data) const {
-  if (std::abs(std::cos(x[1])) < 1e-10) return false;
+  for (int i = 0; i < 4; ++i) {
+    if (!std::isfinite(x[i])) {
+      RCLCPP_ERROR(rclcpp::get_logger("plvins"),
+        "Line manifold Jacobian received non-finite state at component %d", i);
+      return false;
+    }
+  }
+  if (std::abs(std::cos(x[1])) < 1e-10) {
+    RCLCPP_ERROR(rclcpp::get_logger("plvins"),
+      "Line manifold Jacobian is singular near pitch=%g", x[1]);
+    return false;
+  }
   Eigen::Map<Eigen::Matrix<double,4,4,Eigen::RowMajor>> J(data);
   const double s=std::sin(x[0]), c=std::cos(x[0]), t=std::tan(x[1]), cy=std::cos(x[1]);
   J << 1., s*t, c*t, 0., 0., c, -s, 0., 0., s/cy, c/cy, 0., 0., 0., 0., 1.;

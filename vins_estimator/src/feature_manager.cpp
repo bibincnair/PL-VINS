@@ -1,5 +1,6 @@
 #include <plvins_common/ros.hpp>
 #include "feature_manager.h"
+#include <cmath>
 
 Vector2d image_uv1;
 int lineFeaturePerId::endFrame()
@@ -29,7 +30,42 @@ void FeatureManager::setRic(Matrix3d _ric[])
 
 void FeatureManager::clearState()
 {
+    RCLCPP_INFO(rclcpp::get_logger("plvins"),
+        "Clearing feature tracks: points=%zu lines=%zu", feature.size(), linefeature.size());
     feature.clear();
+    linefeature.clear();
+}
+
+size_t FeatureManager::removeInvalidTracks(int last_frame)
+{
+    size_t removed = 0;
+    for (auto it = feature.begin(); it != feature.end(); )
+    {
+        if (!it->hasValidWindow(last_frame))
+        {
+            RCLCPP_WARN(rclcpp::get_logger("plvins"),
+                "Removing point feature %d outside the active frame window: start=%d observations=%zu last_frame=%d",
+                it->feature_id, it->start_frame, it->feature_per_frame.size(), last_frame);
+            it = feature.erase(it);
+            ++removed;
+        }
+        else
+            ++it;
+    }
+    for (auto it = linefeature.begin(); it != linefeature.end(); )
+    {
+        if (!it->hasValidWindow(last_frame))
+        {
+            RCLCPP_WARN(rclcpp::get_logger("plvins"),
+                "Removing line feature %d outside the active frame window: start=%d observations=%zu last_frame=%d",
+                it->feature_id, it->start_frame, it->linefeature_per_frame.size(), last_frame);
+            it = linefeature.erase(it);
+            ++removed;
+        }
+        else
+            ++it;
+    }
+    return removed;
 }
 
 int FeatureManager::getFeatureCount()
@@ -40,7 +76,7 @@ int FeatureManager::getFeatureCount()
 
         it.used_num = it.feature_per_frame.size();
 
-        if (it.used_num >= 2 && it.start_frame < WINDOW_SIZE - 2)
+        if (it.used_num >= 2 && it.start_frame < WINDOW_SIZE - 2 && it.hasValidWindow())
         {
             cnt++;
         }
@@ -387,7 +423,7 @@ void FeatureManager::setDepth(const VectorXd &x)
     for (auto &it_per_id : feature)
     {
         it_per_id.used_num = it_per_id.feature_per_frame.size();
-        if (!(it_per_id.used_num >= 2 && it_per_id.start_frame < WINDOW_SIZE - 2))
+        if (!(it_per_id.used_num >= 2 && it_per_id.start_frame < WINDOW_SIZE - 2 && it_per_id.hasValidWindow()))
             continue;
 
         it_per_id.estimated_depth = 1.0 / x(++feature_index);
@@ -418,7 +454,7 @@ void FeatureManager::clearDepth(const VectorXd &x)
     for (auto &it_per_id : feature)
     {
         it_per_id.used_num = it_per_id.feature_per_frame.size();
-        if (!(it_per_id.used_num >= 2 && it_per_id.start_frame < WINDOW_SIZE - 2))
+        if (!(it_per_id.used_num >= 2 && it_per_id.start_frame < WINDOW_SIZE - 2 && it_per_id.hasValidWindow()))
             continue;
         it_per_id.estimated_depth = 1.0 / x(++feature_index);
     }
@@ -431,7 +467,7 @@ VectorXd FeatureManager::getDepthVector()
     for (auto &it_per_id : feature)
     {
         it_per_id.used_num = it_per_id.feature_per_frame.size();
-        if (!(it_per_id.used_num >= 2 && it_per_id.start_frame < WINDOW_SIZE - 2))
+        if (!(it_per_id.used_num >= 2 && it_per_id.start_frame < WINDOW_SIZE - 2 && it_per_id.hasValidWindow()))
             continue;
 #if 1
         dep_vec(++feature_index) = 1. / it_per_id.estimated_depth;
@@ -450,7 +486,7 @@ int FeatureManager::getLineFeatureCount()
 
         it.used_num = it.linefeature_per_frame.size();
 
-        if (it.used_num >= LINE_MIN_OBS && it.start_frame < WINDOW_SIZE - 2 && it.is_triangulation)
+        if (it.used_num >= LINE_MIN_OBS && it.start_frame < WINDOW_SIZE - 2 && it.is_triangulation && it.hasValidWindow())
         {
             cnt++;
         }
@@ -465,7 +501,7 @@ MatrixXd FeatureManager::getLineOrthVectorInCamera()
     for (auto &it_per_id : linefeature)
     {
         it_per_id.used_num = it_per_id.linefeature_per_frame.size();
-        if (!(it_per_id.used_num >= LINE_MIN_OBS && it_per_id.start_frame < WINDOW_SIZE - 2 && it_per_id.is_triangulation))
+        if (!(it_per_id.used_num >= LINE_MIN_OBS && it_per_id.start_frame < WINDOW_SIZE - 2 && it_per_id.is_triangulation && it_per_id.hasValidWindow()))
             continue;
 
         lineorth_vec.row(++feature_index) = plk_to_orth(it_per_id.line_plucker);
@@ -479,7 +515,7 @@ void FeatureManager::setLineOrthInCamera(MatrixXd x)
     for (auto &it_per_id : linefeature)
     {
         it_per_id.used_num = it_per_id.linefeature_per_frame.size();
-        if (!(it_per_id.used_num >= LINE_MIN_OBS && it_per_id.start_frame < WINDOW_SIZE - 2 && it_per_id.is_triangulation))
+        if (!(it_per_id.used_num >= LINE_MIN_OBS && it_per_id.start_frame < WINDOW_SIZE - 2 && it_per_id.is_triangulation && it_per_id.hasValidWindow()))
             continue;
 
         //std::cout<<"x:"<<x.rows() <<" "<<feature_index<<"\n";
@@ -504,7 +540,7 @@ MatrixXd FeatureManager::getLineOrthVector(Vector3d Ps[], Vector3d tic[], Matrix
     for (auto &it_per_id : linefeature)
     {
         it_per_id.used_num = it_per_id.linefeature_per_frame.size();
-        if (!(it_per_id.used_num >= LINE_MIN_OBS && it_per_id.start_frame < WINDOW_SIZE - 2 && it_per_id.is_triangulation))
+        if (!(it_per_id.used_num >= LINE_MIN_OBS && it_per_id.start_frame < WINDOW_SIZE - 2 && it_per_id.is_triangulation && it_per_id.hasValidWindow()))
             continue;
 
         int imu_i = it_per_id.start_frame;
@@ -529,7 +565,7 @@ void FeatureManager::setLineOrth(MatrixXd x,Vector3d P[], Matrix3d R[], Vector3d
     for (auto &it_per_id : linefeature)
     {
         it_per_id.used_num = it_per_id.linefeature_per_frame.size();
-        if (!(it_per_id.used_num >= LINE_MIN_OBS && it_per_id.start_frame < WINDOW_SIZE - 2 && it_per_id.is_triangulation))
+        if (!(it_per_id.used_num >= LINE_MIN_OBS && it_per_id.start_frame < WINDOW_SIZE - 2 && it_per_id.is_triangulation && it_per_id.hasValidWindow()))
             continue;
 
         Vector4d line_orth_w = x.row(++feature_index);
@@ -585,7 +621,7 @@ void FeatureManager::triangulateLine(Vector3d Ps[], Vector3d tic[], Matrix3d ric
     for (auto &it_per_id : linefeature)        // 遍历每个特征，对新特征进行三角化
     {
         it_per_id.used_num = it_per_id.linefeature_per_frame.size();    // 已经有多少帧看到了这个特征
-        if (!(it_per_id.used_num >= LINE_MIN_OBS && it_per_id.start_frame < WINDOW_SIZE - 2))   // 看到的帧数少于2， 或者 这个特征最近倒数第二帧才看到， 那都不三角化
+        if (!(it_per_id.used_num >= LINE_MIN_OBS && it_per_id.start_frame < WINDOW_SIZE - 2 && it_per_id.hasValidWindow()))
             continue;
 
         if (it_per_id.is_triangulation)       // 如果已经三角化了
@@ -606,6 +642,7 @@ void FeatureManager::triangulateLine(Vector3d Ps[], Vector3d tic[], Matrix3d ric
         // plane pi from ith obs in ith camera frame
         Eigen::Vector4d pii;
         Eigen::Vector3d ni;      // normal vector of plane    
+        bool valid_first_plane = false;
         for (auto &it_per_frame : it_per_id.linefeature_per_frame)   // 遍历所有的观测， 注意 start_frame 也会被遍历
         {
             imu_j++;
@@ -616,7 +653,16 @@ void FeatureManager::triangulateLine(Vector3d Ps[], Vector3d tic[], Matrix3d ric
                 Eigen::Vector3d p1( obsi(0), obsi(1), 1 );
                 Eigen::Vector3d p2( obsi(2), obsi(3), 1 );
                 pii = pi_from_ppp(p1, p2,Vector3d( 0, 0, 0 ));
-                ni = pii.head(3); ni.normalize();
+                ni = pii.head(3);
+                const double first_plane_norm = ni.norm();
+                if (!std::isfinite(first_plane_norm) || first_plane_norm < 1e-12)
+                {
+                    RCLCPP_WARN(rclcpp::get_logger("plvins"),
+                        "Skipping line feature %d with degenerate first-view plane", it_per_id.feature_id);
+                    break;
+                }
+                ni /= first_plane_norm;
+                valid_first_plane = true;
                 continue;
             }
 
@@ -635,9 +681,19 @@ void FeatureManager::triangulateLine(Vector3d Ps[], Vector3d tic[], Matrix3d ric
             p3 = R * p3 + t;
             p4 = R * p4 + t;
             Vector4d pij = pi_from_ppp(p3, p4,t);
-            Eigen::Vector3d nj = pij.head(3); nj.normalize(); 
+            Eigen::Vector3d nj = pij.head(3);
+            const double plane_norm = nj.norm();
+            if (!std::isfinite(plane_norm) || plane_norm < 1e-12)
+            {
+                RCLCPP_WARN(rclcpp::get_logger("plvins"),
+                    "Skipping degenerate observation plane for line feature %d", it_per_id.feature_id);
+                continue;
+            }
+            nj /= plane_norm;
 
             double cos_theta = ni.dot(nj);
+            if (!std::isfinite(cos_theta))
+                continue;
             if(cos_theta < min_cos_theta)
             {
                 min_cos_theta = cos_theta;
@@ -655,10 +711,13 @@ void FeatureManager::triangulateLine(Vector3d Ps[], Vector3d tic[], Matrix3d ric
             // }
 
         }
+
+        if (!valid_first_plane)
+            continue;
         
         // if the distance between two frame is lower than 0.1m or the parallax angle is lower than 15deg , do not triangulate.
         // if(d < 0.1 || min_cos_theta > 0.998) 
-        if(min_cos_theta > 0.998)
+        if(!std::isfinite(min_cos_theta) || min_cos_theta > 0.998)
         // if( d < 0.2 ) 
             continue;
 
@@ -672,6 +731,16 @@ void FeatureManager::triangulateLine(Vector3d Ps[], Vector3d tic[], Matrix3d ric
         Vector6d plk = pipi_plk( pii, pij );
         Vector3d n = plk.head(3);
         Vector3d v = plk.tail(3);
+        const double normal_norm = n.norm();
+        const double direction_norm = v.norm();
+        if (!plk.allFinite() || !std::isfinite(normal_norm) || !std::isfinite(direction_norm) ||
+            normal_norm < 1e-12 || direction_norm < 1e-12)
+        {
+            RCLCPP_WARN(rclcpp::get_logger("plvins"),
+                "Skipping degenerate Plucker line %d: normal_norm=%g direction_norm=%g",
+                it_per_id.feature_id, normal_norm, direction_norm);
+            continue;
+        }
 
         //Vector3d cp = plucker_origin( n, v );
         //if ( cp(2) < 0 )
@@ -868,7 +937,7 @@ void FeatureManager::triangulateLine(Vector3d Ps[], Vector3d tic[], Matrix3d ric
     {
 
         it_per_id.used_num = it_per_id.linefeature_per_frame.size();    // 已经有多少帧看到了这个特征
-        if (!(it_per_id.used_num >= LINE_MIN_OBS && it_per_id.start_frame < WINDOW_SIZE - 2))   // 看到的帧数少于2， 或者 这个特征最近倒数第二帧才看到， 那都不三角化
+        if (!(it_per_id.used_num >= LINE_MIN_OBS && it_per_id.start_frame < WINDOW_SIZE - 2 && it_per_id.hasValidWindow()))
             continue;
 
         // 挑选一条直线
@@ -1087,7 +1156,7 @@ void FeatureManager::triangulate(Vector3d Ps[], Vector3d tic[], Matrix3d ric[])
     for (auto &it_per_id : feature)        // 遍历每个特征，对新特征进行三角化
     {
         it_per_id.used_num = it_per_id.feature_per_frame.size();    // 已经有多少帧看到了这个特征
-        if (!(it_per_id.used_num >= 2 && it_per_id.start_frame < WINDOW_SIZE - 2))   // 看到的帧数少于2， 或者 这个特征最近倒数第二帧才看到， 那都不三角化
+        if (!(it_per_id.used_num >= 2 && it_per_id.start_frame < WINDOW_SIZE - 2 && it_per_id.hasValidWindow()))
             continue;
 
         if (it_per_id.estimated_depth > 0)       // 如果已经三角化了
