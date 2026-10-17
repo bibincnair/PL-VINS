@@ -49,7 +49,8 @@ OpenCV YAML using `config_file:=/absolute/path/to/calibration.yaml`. Use
 `loop_closure:=false` to disable the pose graph. For a live camera, leave
 `use_sim_time:=false` and configure the camera and IMU topics in the calibration
 file. Sensor inputs use best-effort QoS; internal feature messages use reliable
-QoS. See [architecture](docs/architecture.md) for feature channel layouts.
+QoS. See [architecture](docs/architecture.md) for feature channel layouts and
+[LaMAria replay and EVO metrics](docs/lamaria.md) for the installed ROS 2 bags.
 
 The estimator writes `trajectory_tum.txt` (seconds, xyz, qxyzw) and
 `trajectory_ns.txt` (nanoseconds) into `output_directory`. The pose graph writes
