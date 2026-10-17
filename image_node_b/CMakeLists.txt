@@ -1,62 +1,16 @@
-cmake_minimum_required(VERSION 2.8.3)
-project(image_node_b)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
-if(WIN32 AND NOT CYGWIN)
-    set(HOME $ENV{PROFILE})
-else()
-    set(HOME $ENV{HOME})
-endif()
-
-find_package(catkin REQUIRED COMPONENTS
- roscpp
- rospy
- std_msgs
- pcl_conversions
- pcl_msgs
- pcl_ros
- sensor_msgs
- cv_bridge
- image_transport
- camera_model
-)
-
-find_package(OpenCV REQUIRED)
-
-catkin_package(CATKIN_DEPENDS
-roscpp
-std_msgs
-)
-
-# Eigen
-include_directories( "/usr/include/eigen3" )
-
-include_directories(
-include
-${OpenCV_INCLUDE_DIRS}
-${catkin_INCLUDE_DIRS}
-${PCL_DEFINITIONS}
-)
-
-ADD_DEFINITIONS( ${PCL_DEFINITIONS} )
-LINK_LIBRARIES( ${PCL_LIBRARY_DIRS} )
-### find files
-
-file(GLOB_RECURSE HEADER_FILES ${CMAKE_CURRENT_SOURCE_DIR}/include/*.h*)
-file(GLOB_RECURSE SOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.c*)
-
-add_executable(image_node_b
-${HEADER_FILES}
-${SOURCE_FILES}
-${PCL_LIBRARIES}
-)
-
-target_link_libraries(image_node_b
-${catkin_LIBRARIES}
-${OpenCV_LIBRARIES}
-${PCL_LIBRARIES}
-
-)
-
-
-
-
+cmake_minimum_required(VERSION 3.22)
+project(image_node_b VERSION 0.1.0 LANGUAGES CXX)
+include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/Dependencies.cmake)
+find_package(ament_cmake REQUIRED)
+find_package(plvins_common REQUIRED)
+find_package(camera_model REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(cv_bridge REQUIRED)
+find_package(message_filters REQUIRED)
+find_package(OpenCV 5.0.0 EXACT REQUIRED COMPONENTS core imgproc)
+add_executable(image_node_b src/image_node_b.cpp)
+ament_target_dependencies(image_node_b plvins_common camera_model rclcpp sensor_msgs cv_bridge message_filters)
+target_link_libraries(image_node_b Eigen3::Eigen ${OpenCV_LIBS})
+install(TARGETS image_node_b DESTINATION lib/${PROJECT_NAME})
+ament_package()
