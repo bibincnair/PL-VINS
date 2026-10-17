@@ -213,8 +213,6 @@ def main():
     parser.add_argument('--playback-rate', type=float, default=0.5)
     parser.add_argument('--startup-timeout', type=int, default=90)
     parser.add_argument('--loop-closure', action='store_true')
-    parser.add_argument('--foxglove', action='store_true')
-    parser.add_argument('--foxglove-port', type=int, default=8765)
     parser.add_argument('--no-evaluate', action='store_true', help='run SLAM but skip EVO metrics')
     args = parser.parse_args()
 
@@ -245,8 +243,7 @@ def main():
         write_reference(groundtruth, reference)
         launch = ['ros2', 'launch', 'plvins_estimator', 'plvins.launch.py',
                   f'config_file:={out_dir / "config.yaml"}', f'output_directory:={out_dir}',
-                  'use_sim_time:=true', f'loop_closure:={str(args.loop_closure).lower()}',
-                  f'foxglove:={str(args.foxglove).lower()}', f'foxglove_port:={args.foxglove_port}']
+                  'use_sim_time:=true', f'loop_closure:={str(args.loop_closure).lower()}']
         with (out_dir / 'launch.log').open('w') as launch_log:
             process = subprocess.Popen(launch, stdout=launch_log, stderr=subprocess.STDOUT,
                                        start_new_session=True)

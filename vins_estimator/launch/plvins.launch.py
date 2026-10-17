@@ -1,9 +1,8 @@
 from pathlib import Path
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
+from launch.actions import DeclareLaunchArgument
 from launch.conditions import IfCondition
-from launch.launch_description_sources import XMLLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
@@ -15,14 +14,6 @@ def generate_launch_description():
     common = {'config_file': config,
               'output_directory': LaunchConfiguration('output_directory'),
               'use_sim_time': ParameterValue(LaunchConfiguration('use_sim_time'), value_type=bool)}
-    def foxglove_bridge(context):
-        if LaunchConfiguration('foxglove').perform(context).lower() not in ('1', 'true', 'yes'):
-            return []
-        bridge_share = Path(get_package_share_directory('foxglove_bridge'))
-        return [IncludeLaunchDescription(
-            XMLLaunchDescriptionSource(str(bridge_share / 'launch/foxglove_bridge_launch.xml')),
-            launch_arguments={'port': LaunchConfiguration('foxglove_port')}.items())]
-
     return LaunchDescription([
         DeclareLaunchArgument('config_file', default_value=str(share / 'config/euroc/loop.yaml')),
         DeclareLaunchArgument('output_directory', default_value=str(Path.cwd() / 'results')),
@@ -30,8 +21,6 @@ def generate_launch_description():
         DeclareLaunchArgument('loop_closure', default_value='true'),
         DeclareLaunchArgument('overlay', default_value='false'),
         DeclareLaunchArgument('rviz', default_value='false'),
-        DeclareLaunchArgument('foxglove', default_value='false'),
-        DeclareLaunchArgument('foxglove_port', default_value='8765'),
         Node(package='feature_tracker', executable='feature_tracker', name='feature_tracker', parameters=[common], output='screen'),
         Node(package='feature_tracker', executable='LineFeature_tracker', name='linefeature_tracker', parameters=[common], output='screen'),
         Node(package='plvins_estimator', executable='plvins_estimator', name='plvins_estimator', parameters=[common], output='screen'),
@@ -39,5 +28,4 @@ def generate_launch_description():
         Node(package='image_node_b', executable='image_node_b', name='image_node_b', parameters=[common], output='screen', condition=IfCondition(LaunchConfiguration('overlay'))),
         Node(package='rviz2', executable='rviz2', arguments=['-d', str(share / 'config/plvins.rviz')],
              parameters=[{'use_sim_time': common['use_sim_time']}], condition=IfCondition(LaunchConfiguration('rviz'))),
-        OpaqueFunction(function=foxglove_bridge),
     ])

@@ -33,8 +33,7 @@ Run a sequence and calculate metrics:
 .venv/bin/python tools/run_lamaria.py \
   --dataset-root /datasets/lamaraia \
   --sequence R_01_easy \
-  --output-root results/lamaria \
-  --foxglove
+  --output-root results/lamaria
 ```
 
 Repeat with `R_04_medium` or `R_08_hard`. The runner reads each sequence's
@@ -55,9 +54,10 @@ directories are never overwritten. Playback defaults to `--playback-rate 0.5`;
 adjust this on a constrained machine,
 `--loop-closure` to run the pose graph, or `--no-evaluate` to skip EVO.
 
-`plvins.launch.py` also accepts `foxglove:=true` and `foxglove_port:=8765`
-directly. The bridge is optional; connect Foxglove to `ws://localhost:8765`.
-The `.mcap` files can also be opened directly in Foxglove for offline inspection.
+Foxglove runs separately from the PL-VINS launch. In another terminal, run
+`ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:=8765` and connect
+to `ws://localhost:8765`. The `.mcap` files can also be opened directly in
+Foxglove for offline inspection.
 
 The runner reports EVO APE after rigid SE(3) alignment and translational and
 rotational RPE over 1 m. APE is the useful controlled-sequence comparison; the
@@ -79,4 +79,5 @@ ros2 launch plvins_estimator plvins.launch.py \
 ros2 bag play /datasets/lamaraia/R_01_easy --clock
 ```
 
-Add `foxglove:=true` to the launch command when the bridge package is installed.
+Run the Foxglove bridge command in a separate terminal when the bridge package
+is installed.
