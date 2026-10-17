@@ -1,3 +1,4 @@
+#include <plvins_common/ros.hpp>
 #include "feature_tracker.h"
 
 int FeatureTracker::n_id = 0;
@@ -87,7 +88,7 @@ void FeatureTracker::readImage(const cv::Mat &_img)
         cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(3.0, cv::Size(8, 8));
         TicToc t_c;
         clahe->apply(_img, img);
-        ROS_DEBUG("CLAHE costs: %fms", t_c.toc());
+        RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "CLAHE costs: %fms", t_c.toc());
     }
     else
         img = _img;
@@ -121,7 +122,7 @@ void FeatureTracker::readImage(const cv::Mat &_img)
         reduceVector(forw_pts, status);
         reduceVector(ids, status);
         reduceVector(track_cnt, status);
-        ROS_DEBUG("temporal optical flow costs: %fms", t_o.toc());
+        RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "temporal optical flow costs: %fms", t_o.toc());
     }
 
     if (PUB_THIS_FRAME)
@@ -131,12 +132,12 @@ void FeatureTracker::readImage(const cv::Mat &_img)
         for (auto &n : track_cnt)   // 对tracking上的特征的跟踪帧数进行更新，从第i帧成功跟踪到了i+1帧，跟踪帧数+1
             n++;
 
-        ROS_DEBUG("set mask begins");
+        RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "set mask begins");
         TicToc t_m;
         setMask();                 // 设置模板，把那些已经检测出特征点的区域给掩盖掉, 其他区域用于检测新的特征点
-        ROS_DEBUG("set mask costs %fms", t_m.toc());
+        RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "set mask costs %fms", t_m.toc());
 
-        ROS_DEBUG("detect feature begins");
+        RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "detect feature begins");
         TicToc t_t;
         int n_max_cnt = MAX_CNT - static_cast<int>(forw_pts.size());  // 如果 当前特征点数目< MAX_CNT,  那就检测一些新的特征点
         if (n_max_cnt > 0)    // 少于最大特征点数目，那就补充新特征的
@@ -151,12 +152,12 @@ void FeatureTracker::readImage(const cv::Mat &_img)
         }
         else
             n_pts.clear();
-        ROS_DEBUG("detect feature costs: %fms", t_t.toc());
+        RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "detect feature costs: %fms", t_t.toc());
 
-        ROS_DEBUG("add feature begins");
+        RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "add feature begins");
         TicToc t_a;
         addPoints();         // 将这个新的特征点加入 到 forw_pts
-        ROS_DEBUG("selectFeature costs: %fms", t_a.toc());
+        RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "selectFeature costs: %fms", t_a.toc());
 
         prev_img = forw_img;
         prev_pts = forw_pts;
@@ -169,7 +170,7 @@ void FeatureTracker::rejectWithF()
 {
     if (forw_pts.size() >= 8)
     {
-        ROS_DEBUG("FM ransac begins");
+        RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "FM ransac begins");
         TicToc t_f;
         vector<cv::Point2f> un_prev_pts(prev_pts.size()), un_forw_pts(forw_pts.size());
         for (unsigned int i = 0; i < prev_pts.size(); i++)
@@ -194,8 +195,8 @@ void FeatureTracker::rejectWithF()
         reduceVector(forw_pts, status);
         reduceVector(ids, status);
         reduceVector(track_cnt, status);
-        ROS_DEBUG("FM ransac: %d -> %lu: %f", size_a, forw_pts.size(), 1.0 * forw_pts.size() / size_a);
-        ROS_DEBUG("FM ransac costs: %fms", t_f.toc());
+        RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "FM ransac: %d -> %lu: %f", size_a, forw_pts.size(), 1.0 * forw_pts.size() / size_a);
+        RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "FM ransac costs: %fms", t_f.toc());
     }
 }
 
@@ -213,8 +214,9 @@ bool FeatureTracker::updateID(unsigned int i)
 
 void FeatureTracker::readIntrinsicParameter(const string &calib_file)
 {
-    ROS_INFO("reading paramerter of camera %s", calib_file.c_str());
+    RCLCPP_INFO(rclcpp::get_logger("plvins"), "reading paramerter of camera %s", calib_file.c_str());
     m_camera = CameraFactory::instance()->generateCameraFromYamlFile(calib_file);
+    if (!m_camera) throw std::runtime_error("Unsupported camera calibration: " + calib_file);
 }
 
 void FeatureTracker::showUndistortion(const string &name)
@@ -246,7 +248,7 @@ void FeatureTracker::showUndistortion(const string &name)
         }
         else
         {
-            //ROS_ERROR("(%f %f) -> (%f %f)", distortedp[i].y, distortedp[i].x, pp.at<float>(1, 0), pp.at<float>(0, 0));
+            //RCLCPP_ERROR(rclcpp::get_logger("plvins"), "(%f %f) -> (%f %f)", distortedp[i].y, distortedp[i].x, pp.at<float>(1, 0), pp.at<float>(0, 0));
         }
     }
     cv::imshow(name, undistortedImg);
@@ -260,7 +262,7 @@ void FeatureTracker::showUndistortion()
     cv::Mat undist_map1_, undist_map2_;
 
     m_camera->initUndistortRectifyMap(undist_map1_,undist_map2_);
-    cv::remap(cur_img, undistortedImg, undist_map1_, undist_map2_, CV_INTER_LINEAR);
+    cv::remap(cur_img, undistortedImg, undist_map1_, undist_map2_, cv::INTER_LINEAR);
 
     cv::imshow("undist", undistortedImg);
     cv::waitKey(1);

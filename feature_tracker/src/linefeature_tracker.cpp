@@ -1,3 +1,4 @@
+#include <plvins_common/ros.hpp>
 #include "linefeature_tracker.h"
 // #include "line_descriptor/src/precomp_custom.hpp"
 
@@ -10,9 +11,10 @@ LineFeatureTracker::LineFeatureTracker()
 
 void LineFeatureTracker::readIntrinsicParameter(const string &calib_file)
 {
-    ROS_INFO("reading paramerter of camera %s", calib_file.c_str());
+    RCLCPP_INFO(rclcpp::get_logger("plvins"), "reading paramerter of camera %s", calib_file.c_str());
 
     m_camera = CameraFactory::instance()->generateCameraFromYamlFile(calib_file);
+    if (!m_camera) throw std::runtime_error("Unsupported camera calibration: " + calib_file);
     K_ = m_camera->initUndistortRectifyMap(undist_map1_,undist_map2_);    
 
 }
@@ -139,8 +141,8 @@ void LineFeatureTracker::readImage(const cv::Mat &_img)
     cv::Mat img;
     TicToc t_p;
     frame_cnt++;
-    cv::remap(_img, img, undist_map1_, undist_map2_, CV_INTER_LINEAR);
-    //ROS_INFO("undistortImage costs: %fms", t_p.toc());
+    cv::remap(_img, img, undist_map1_, undist_map2_, cv::INTER_LINEAR);
+    //RCLCPP_INFO(rclcpp::get_logger("plvins"), "undistortImage costs: %fms", t_p.toc());
     if (EQUALIZE)   // 直方图均衡化
     {
         cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(3.0, cv::Size(8, 8));
@@ -167,7 +169,7 @@ void LineFeatureTracker::readImage(const cv::Mat &_img)
     int lineMethod = 2;
     bool isROI = false;
     lineDetector ld(lineMethod, isROI, 0, (float)img.cols, 0, (float)img.rows);
-    //ROS_INFO("ld inition costs: %fms", t_li.toc());
+    //RCLCPP_INFO(rclcpp::get_logger("plvins"), "ld inition costs: %fms", t_li.toc());
     TicToc t_ld;
     forwframe_->vecLine = ld.detect(img);
 
@@ -177,7 +179,7 @@ void LineFeatureTracker::readImage(const cv::Mat &_img)
         else
             forwframe_->lineID.push_back(-1);   // give a negative id
     }
-    ROS_INFO("line detect costs: %fms", t_ld.toc());
+    RCLCPP_INFO(rclcpp::get_logger("plvins"), "line detect costs: %fms", t_ld.toc());
 
     // step 3: junction & line matching
     if(curframe_->vecLine.size() > 0)
@@ -185,7 +187,7 @@ void LineFeatureTracker::readImage(const cv::Mat &_img)
         TicToc t_nlt;
         vector<pair<int, int> > linetracker;
         NearbyLineTracking(forwframe_->vecLine, curframe_->vecLine, linetracker);
-        ROS_INFO("line match costs: %fms", t_nlt.toc());
+        RCLCPP_INFO(rclcpp::get_logger("plvins"), "line match costs: %fms", t_nlt.toc());
 
         // 对新图像上的line赋予id值
         for(int j = 0; j < linetracker.size(); j++)
@@ -200,7 +202,7 @@ void LineFeatureTracker::readImage(const cv::Mat &_img)
         //visualizeLinewithID(forwframe_->vecLine,forwframe_->lineID,forwframe_->img,"forwframe_");
         //visualizeLinewithID(curframe_->vecLine,curframe_->lineID,curframe_->img,"curframe_");
         stringstream ss;
-        ss <<"/home/hyj/datasets/line/" <<frame_cnt<<".jpg";
+        ss <<"results/line_debug/" <<frame_cnt<<".jpg";
         // SaveFrameLinewithID(forwframe_->vecLine,forwframe_->lineID,forwframe_->img,ss.str().c_str());
         waitKey(5);
 
@@ -290,15 +292,15 @@ void visualize_line_match(Mat imageMat1, Mat imageMat2,
     /* plot matches */
     // cv::cvtColor(imageMat2, img2, cv::COLOR_GRAY2BGR);
 
-    namedWindow("LSD matches", CV_WINDOW_NORMAL);
+    namedWindow("LSD matches", cv::WINDOW_NORMAL);
     imshow( "LSD matches", lsd_outImg );
     string name = to_string(frame_num);
-    string path = "/home/dragon/ros_ws/p_ws/src/PL-VIO/feature_tracker/src/image/";
+    string path = "results/line_debug/";
     name = path + name + ".jpg";
     frame_num ++;
     imwrite(name, lsd_outImg);
-    // namedWindow("LSD matches1", CV_WINDOW_NORMAL);
-    namedWindow("LSD matches2", CV_WINDOW_NORMAL);
+    // namedWindow("LSD matches1", cv::WINDOW_NORMAL);
+    namedWindow("LSD matches2", cv::WINDOW_NORMAL);
     // imshow("LSD matches1", img1);
     imshow("LSD matches2", img2);
     waitKey(1);
@@ -357,8 +359,8 @@ void visualize_line_match(Mat imageMat1, Mat imageMat2,
 
     imshow( "LSD matches", lsd_outImg );
     */
-   namedWindow("LSD matches1", CV_WINDOW_NORMAL);
-   namedWindow("LSD matches2", CV_WINDOW_NORMAL);
+   namedWindow("LSD matches1", cv::WINDOW_NORMAL);
+   namedWindow("LSD matches2", cv::WINDOW_NORMAL);
     imshow("LSD matches1", img1);
     imshow("LSD matches2", img2);
     waitKey(1);
@@ -399,7 +401,7 @@ void visualize_line(Mat imageMat1,std::vector<KeyLine> octave0_1)
 
     imshow( "LSD matches", lsd_outImg );
     */
-    //namedWindow("LSD_C", CV_WINDOW_NORMAL);
+    //namedWindow("LSD_C", cv::WINDOW_NORMAL);
     //imshow("LSD_C", img1);
     //waitKey(1);
 }
@@ -414,13 +416,13 @@ void LineFeatureTracker::readImage(const cv::Mat &_img)
     TicToc t_p;
     frame_cnt++;
 
-    cv::remap(_img, img, undist_map1_, undist_map2_, CV_INTER_LINEAR);
+    cv::remap(_img, img, undist_map1_, undist_map2_, cv::INTER_LINEAR);
 
 
 
 //    cv::imshow("lineimg",img);
 //    cv::waitKey(1);
-    //ROS_INFO("undistortImage costs: %fms", t_p.toc());
+    //RCLCPP_INFO(rclcpp::get_logger("plvins"), "undistortImage costs: %fms", t_p.toc());
     if (EQUALIZE)   // 直方图均衡化
     {
         cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(3.0, cv::Size(8, 8));
@@ -477,7 +479,7 @@ void LineFeatureTracker::readImage(const cv::Mat &_img)
     // lsd_->detect( img, lsd, 2, 2 );
 
     sum_time += t_li.toc();
-   ROS_INFO("line detect costs: %fms", t_li.toc());
+   RCLCPP_INFO(rclcpp::get_logger("plvins"), "line detect costs: %fms", t_li.toc());
 
     Mat lbd_descr, keylbd_descr;
     // step 2: lbd descriptor
@@ -497,8 +499,8 @@ void LineFeatureTracker::readImage(const cv::Mat &_img)
         }
     }
     // std::cout<<"lbd_descr = "<<lbd_descr.size()<<std::endl;
-//    ROS_INFO("lbd_descr detect costs: %fms", keylsd.size() * t_lbd.toc() / lsd.size() );
-    sum_time += keylsd.size() * t_lbd.toc() / lsd.size();
+//    RCLCPP_INFO(rclcpp::get_logger("plvins"), "lbd_descr detect costs: %fms", keylsd.size() * t_lbd.toc() / lsd.size() );
+    if (!lsd.empty()) sum_time += keylsd.size() * t_lbd.toc() / lsd.size();
 ///////////////
 
     forwframe_->keylsd = keylsd;
@@ -530,10 +532,10 @@ void LineFeatureTracker::readImage(const cv::Mat &_img)
         Ptr<BinaryDescriptorMatcher> bdm_;
         bdm_ = BinaryDescriptorMatcher::createBinaryDescriptorMatcher();
         bdm_->match(forwframe_->lbd_descr, curframe_->lbd_descr, lsd_matches);
-//        ROS_INFO("lbd_macht costs: %fms", t_match.toc());
+//        RCLCPP_INFO(rclcpp::get_logger("plvins"), "lbd_macht costs: %fms", t_match.toc());
         sum_time += t_match.toc();
         mean_time = sum_time/frame_cnt;
-        // ROS_INFO("line feature tracker mean costs: %fms", mean_time);
+        // RCLCPP_INFO(rclcpp::get_logger("plvins"), "line feature tracker mean costs: %fms", mean_time);
         /* select best matches */
         std::vector<DMatch> good_matches;
         std::vector<KeyLine> good_Keylines;

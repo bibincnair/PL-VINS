@@ -13,7 +13,7 @@
 #include "tic_toc.h"
 
 // #include <opencv2/line_descriptor.hpp>
-#include <opencv2/features2d.hpp>
+#include <opencv2/features.hpp>
 
 #include "line_descriptor_custom.hpp"
 

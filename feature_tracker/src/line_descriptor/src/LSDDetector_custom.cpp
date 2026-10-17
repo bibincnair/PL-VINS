@@ -242,7 +242,7 @@ void LSDDetectorC::detectImpl( const Mat& imageSrc, std::vector<KeyLine>& keylin
   lsd->computeGaussianPyramid( image, numOctaves, scale );
 
   /* create an LSD extractor */
-  cv::Ptr<cv::LineSegmentDetector> ls = cv::createLineSegmentDetector( opts.refine,
+  cv::Ptr<cv::LineSegmentDetector> ls = cv::createLineSegmentDetector( static_cast<cv::LineSegmentDetectorModes>(opts.refine),
                                                                        opts.scale,
                                                                        opts.sigma_scale,
                                                                        opts.quant,
@@ -350,7 +350,7 @@ void LSDDetectorC::detectImplFast( const Mat& imageSrc, std::vector<KeyLine>& ke
   lsd->computeGaussianPyramid( image, numOctaves, scale );
 
   /* create an LSD extractor */
-  cv::Ptr<cv::LineSegmentDetector> ls = cv::createLineSegmentDetector( opts.refine,
+  cv::Ptr<cv::LineSegmentDetector> ls = cv::createLineSegmentDetector( static_cast<cv::LineSegmentDetectorModes>(opts.refine),
                                                                        opts.scale,
                                                                        opts.sigma_scale,
                                                                        opts.quant,

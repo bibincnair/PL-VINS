@@ -1,3 +1,4 @@
+#include <opencv2/geometry.hpp>
 #pragma once
 
 #include <cstdio>
@@ -7,7 +8,7 @@
 #include <csignal>
 
 #include <opencv2/opencv.hpp>
-#include <eigen3/Eigen/Dense>
+#include <Eigen/Dense>
 
 #include "camodocal/camera_models/CameraFactory.h"
 #include "camodocal/camera_models/CataCamera.h"
