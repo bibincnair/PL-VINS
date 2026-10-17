@@ -1,3 +1,4 @@
+#include <plvins_common/ros.hpp>
 #include "keyframe.h"
 
 template <typename Derived>
@@ -222,16 +223,8 @@ void KeyFrame::PnPRANSAC(const vector<cv::Point2f> &matched_2d_old_norm,
     cv::Mat inliers;
     TicToc t_pnp_ransac;
 
-    if (CV_MAJOR_VERSION < 3)
-        solvePnPRansac(matched_3d, matched_2d_old_norm, K, D, rvec, t, true, 100, 10.0 / 460.0, 100, inliers);
-    else
-    {
-        if (CV_MINOR_VERSION < 2)
-            solvePnPRansac(matched_3d, matched_2d_old_norm, K, D, rvec, t, true, 100, sqrt(10.0 / 460.0), 0.99, inliers);
-        else
-            solvePnPRansac(matched_3d, matched_2d_old_norm, K, D, rvec, t, true, 100, 10.0 / 460.0, 0.99, inliers);
-
-    }
+    cv::solvePnPRansac(matched_3d, matched_2d_old_norm, K, D, rvec, t, true,
+                      100, 10.0 / 460.0, 0.99, inliers);
 
     for (int i = 0; i < (int)matched_2d_old_norm.size(); i++)
         status.push_back(0);
@@ -278,7 +271,7 @@ bool KeyFrame::findConnection(KeyFrame* old_kf)
 	        cv::Mat gray_img, loop_match_img;
 	        cv::Mat old_img = old_kf->image;
 	        cv::hconcat(image, old_img, gray_img);
-	        cvtColor(gray_img, loop_match_img, CV_GRAY2RGB);
+	        cvtColor(gray_img, loop_match_img, cv::COLOR_GRAY2RGB);
 	        for(int i = 0; i< (int)point_2d_uv.size(); i++)
 	        {
 	            cv::Point2f cur_pt = point_2d_uv[i];
@@ -291,7 +284,7 @@ bool KeyFrame::findConnection(KeyFrame* old_kf)
 	            cv::circle(loop_match_img, old_pt, 5, cv::Scalar(0, 255, 0));
 	        }
 	        ostringstream path;
-	        path << "/home/tony-ws1/raw_data/loop_image/"
+	        path << (std::filesystem::path(VINS_RESULT_PATH).parent_path() / "loop_image").string() + "/"
 	                << index << "-"
 	                << old_kf->index << "-" << "0raw_point.jpg";
 	        cv::imwrite( path.str().c_str(), loop_match_img);
@@ -316,7 +309,7 @@ bool KeyFrame::findConnection(KeyFrame* old_kf)
             cv::Mat old_img = old_kf->image;
             cv::hconcat(image, gap_image, gap_image);
             cv::hconcat(gap_image, old_img, gray_img);
-            cvtColor(gray_img, loop_match_img, CV_GRAY2RGB);
+            cvtColor(gray_img, loop_match_img, cv::COLOR_GRAY2RGB);
 	        for(int i = 0; i< (int)matched_2d_cur.size(); i++)
 	        {
 	            cv::Point2f cur_pt = matched_2d_cur[i];
@@ -336,16 +329,16 @@ bool KeyFrame::findConnection(KeyFrame* old_kf)
 	        }
 
 	        ostringstream path, path1, path2;
-	        path <<  "/home/tony-ws1/raw_data/loop_image/"
+	        path <<  (std::filesystem::path(VINS_RESULT_PATH).parent_path() / "loop_image").string() + "/"
 	                << index << "-"
 	                << old_kf->index << "-" << "1descriptor_match.jpg";
 	        cv::imwrite( path.str().c_str(), loop_match_img);
 	        /*
-	        path1 <<  "/home/tony-ws1/raw_data/loop_image/"
+	        path1 <<  (std::filesystem::path(VINS_RESULT_PATH).parent_path() / "loop_image").string() + "/"
 	                << index << "-"
 	                << old_kf->index << "-" << "1descriptor_match_1.jpg";
 	        cv::imwrite( path1.str().c_str(), image);
-	        path2 <<  "/home/tony-ws1/raw_data/loop_image/"
+	        path2 <<  (std::filesystem::path(VINS_RESULT_PATH).parent_path() / "loop_image").string() + "/"
 	                << index << "-"
 	                << old_kf->index << "-" << "1descriptor_match_2.jpg";
 	        cv::imwrite( path2.str().c_str(), old_img);	        
@@ -372,7 +365,7 @@ bool KeyFrame::findConnection(KeyFrame* old_kf)
             cv::Mat old_img = old_kf->image;
             cv::hconcat(image, gap_image, gap_image);
             cv::hconcat(gap_image, old_img, gray_img);
-            cvtColor(gray_img, loop_match_img, CV_GRAY2RGB);
+            cvtColor(gray_img, loop_match_img, cv::COLOR_GRAY2RGB);
 	        for(int i = 0; i< (int)matched_2d_cur.size(); i++)
 	        {
 	            cv::Point2f cur_pt = matched_2d_cur[i];
@@ -392,7 +385,7 @@ bool KeyFrame::findConnection(KeyFrame* old_kf)
 	        }
 
 	        ostringstream path;
-	        path <<  "/home/tony-ws1/raw_data/loop_image/"
+	        path <<  (std::filesystem::path(VINS_RESULT_PATH).parent_path() / "loop_image").string() + "/"
 	                << index << "-"
 	                << old_kf->index << "-" << "2fundamental_match.jpg";
 	        cv::imwrite( path.str().c_str(), loop_match_img);
@@ -422,7 +415,7 @@ bool KeyFrame::findConnection(KeyFrame* old_kf)
 	            cv::Mat old_img = old_kf->image;
 	            cv::hconcat(image, gap_image, gap_image);
 	            cv::hconcat(gap_image, old_img, gray_img);
-	            cvtColor(gray_img, loop_match_img, CV_GRAY2RGB);
+	            cvtColor(gray_img, loop_match_img, cv::COLOR_GRAY2RGB);
 	            for(int i = 0; i< (int)matched_2d_cur.size(); i++)
 	            {
 	                cv::Point2f cur_pt = matched_2d_cur[i];
@@ -441,14 +434,14 @@ bool KeyFrame::findConnection(KeyFrame* old_kf)
 	                cv::line(loop_match_img, matched_2d_cur[i], old_pt, cv::Scalar(0, 255, 0), 2, 8, 0);
 	            }
 	            cv::Mat notation(50, COL + gap + COL, CV_8UC3, cv::Scalar(255, 255, 255));
-	            putText(notation, "current frame: " + to_string(index) + "  sequence: " + to_string(sequence), cv::Point2f(20, 30), CV_FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(255), 3);
+	            putText(notation, "current frame: " + to_string(index) + "  sequence: " + to_string(sequence), cv::Point2f(20, 30), cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(255), 3);
 
-	            putText(notation, "previous frame: " + to_string(old_kf->index) + "  sequence: " + to_string(old_kf->sequence), cv::Point2f(20 + COL + gap, 30), CV_FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(255), 3);
+	            putText(notation, "previous frame: " + to_string(old_kf->index) + "  sequence: " + to_string(old_kf->sequence), cv::Point2f(20 + COL + gap, 30), cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(255), 3);
 	            cv::vconcat(notation, loop_match_img, loop_match_img);
 
 	            /*
 	            ostringstream path;
-	            path <<  "/home/tony-ws1/raw_data/loop_image/"
+	            path <<  (std::filesystem::path(VINS_RESULT_PATH).parent_path() / "loop_image").string() + "/"
 	                    << index << "-"
 	                    << old_kf->index << "-" << "3pnp_match.jpg";
 	            cv::imwrite( path.str().c_str(), loop_match_img);
@@ -461,9 +454,9 @@ bool KeyFrame::findConnection(KeyFrame* old_kf)
 	            	*/
 	            	cv::Mat thumbimage;
 	            	cv::resize(loop_match_img, thumbimage, cv::Size(loop_match_img.cols / 2, loop_match_img.rows / 2));
-	    	    	sensor_msgs::ImagePtr msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", thumbimage).toImageMsg();
-	                msg->header.stamp = ros::Time(time_stamp);
-	    	    	pub_match_img.publish(msg);
+                    sensor_msgs::msg::Image::SharedPtr msg = cv_bridge::CvImage(std_msgs::msg::Header(), "bgr8", thumbimage).toImageMsg();
+	                msg->header.stamp = plvins::stamp(time_stamp);
+                    pub_match_img->publish(*msg);
 	            }
 	        }
 	    #endif
@@ -487,11 +480,11 @@ bool KeyFrame::findConnection(KeyFrame* old_kf)
 	    	             relative_yaw;
 	    	if(FAST_RELOCALIZATION)
 	    	{
-			    sensor_msgs::PointCloud msg_match_points;
-			    msg_match_points.header.stamp = ros::Time(time_stamp);
+			    sensor_msgs::msg::PointCloud msg_match_points;
+			    msg_match_points.header.stamp = plvins::stamp(time_stamp);
 			    for (int i = 0; i < (int)matched_2d_old_norm.size(); i++)
 			    {
-		            geometry_msgs::Point32 p;
+		            geometry_msgs::msg::Point32 p;
 		            p.x = matched_2d_old_norm[i].x;
 		            p.y = matched_2d_old_norm[i].y;
 		            p.z = matched_id[i];
@@ -500,7 +493,7 @@ bool KeyFrame::findConnection(KeyFrame* old_kf)
 			    Eigen::Vector3d T = old_kf->T_w_i; 
 			    Eigen::Matrix3d R = old_kf->R_w_i;
 			    Quaterniond Q(R);
-			    sensor_msgs::ChannelFloat32 t_q_index;
+			    sensor_msgs::msg::ChannelFloat32 t_q_index;
 			    t_q_index.values.push_back(T.x());
 			    t_q_index.values.push_back(T.y());
 			    t_q_index.values.push_back(T.z());
@@ -510,7 +503,7 @@ bool KeyFrame::findConnection(KeyFrame* old_kf)
 			    t_q_index.values.push_back(Q.z());
 			    t_q_index.values.push_back(index);
 			    msg_match_points.channels.push_back(t_q_index);
-			    pub_match_points.publish(msg_match_points);
+			    pub_match_points->publish(msg_match_points);
 	    	}
 	        return true;
 	    }

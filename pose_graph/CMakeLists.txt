@@ -1,47 +1,32 @@
-cmake_minimum_required(VERSION 2.8.3)
-project(pose_graph)
-
-set(CMAKE_BUILD_TYPE "Release")
-set(CMAKE_CXX_FLAGS "-std=c++11")
-#-DEIGEN_USE_MKL_ALL")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -g")
-
-find_package(catkin REQUIRED COMPONENTS
-    roscpp
-    std_msgs
-    nav_msgs
-    camera_model
-    cv_bridge
-    roslib
-    )
-
-find_package(OpenCV)
-
-
-find_package(Ceres REQUIRED)
-
-set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
-find_package(Eigen3)
-
-include_directories(${catkin_INCLUDE_DIRS} ${CERES_INCLUDE_DIRS}  ${EIGEN3_INCLUDE_DIR})
-
-catkin_package()
-
-add_executable(pose_graph
-    src/pose_graph_node.cpp
-    src/pose_graph.cpp
-    src/keyframe.cpp
-    src/utility/CameraPoseVisualization.cpp
-    src/ThirdParty/DBoW/BowVector.cpp
-    src/ThirdParty/DBoW/FBrief.cpp
-    src/ThirdParty/DBoW/FeatureVector.cpp
-    src/ThirdParty/DBoW/QueryResults.cpp
-    src/ThirdParty/DBoW/ScoringObject.cpp
-    src/ThirdParty/DUtils/Random.cpp
-    src/ThirdParty/DUtils/Timestamp.cpp
-    src/ThirdParty/DVision/BRIEF.cpp
-    src/ThirdParty/VocabularyBinary.cpp
-    )
-
-target_link_libraries(pose_graph ${catkin_LIBRARIES}  ${OpenCV_LIBS} ${CERES_LIBRARIES}) 
-# message("catkin_lib  ${catkin_LIBRARIES}")
+cmake_minimum_required(VERSION 3.22)
+project(pose_graph VERSION 0.1.0 LANGUAGES CXX)
+include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/Dependencies.cmake)
+find_package(ament_cmake REQUIRED)
+find_package(plvins_common REQUIRED)
+find_package(camera_model REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(visualization_msgs REQUIRED)
+find_package(cv_bridge REQUIRED)
+find_package(ament_index_cpp REQUIRED)
+find_package(std_srvs REQUIRED)
+find_package(OpenCV 5.0.0 EXACT REQUIRED COMPONENTS core imgproc features calib geometry imgcodecs)
+find_package(Ceres 2.2.0 EXACT REQUIRED)
+file(GLOB bow CONFIGURE_DEPENDS src/ThirdParty/DBoW/*.cpp src/ThirdParty/DUtils/*.cpp)
+add_executable(pose_graph src/pose_graph_node.cpp src/pose_graph.cpp src/keyframe.cpp src/utility/CameraPoseVisualization.cpp ${bow} src/ThirdParty/DVision/BRIEF.cpp src/ThirdParty/VocabularyBinary.cpp)
+target_include_directories(pose_graph PRIVATE ${PLVINS_DEPENDENCY_PREFIX}/include)
+ament_target_dependencies(pose_graph plvins_common camera_model rclcpp sensor_msgs std_msgs geometry_msgs nav_msgs visualization_msgs cv_bridge ament_index_cpp std_srvs)
+target_link_libraries(pose_graph Eigen3::Eigen Ceres::ceres ${OpenCV_LIBS})
+install(TARGETS pose_graph DESTINATION lib/${PROJECT_NAME})
+install(FILES ../support_files/brief_k10L6.bin ../support_files/brief_pattern.yml DESTINATION share/${PROJECT_NAME}/support_files)
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(yaw_manifold_test test/yaw_manifold_test.cpp)
+  target_include_directories(yaw_manifold_test PRIVATE ${PLVINS_DEPENDENCY_PREFIX}/include)
+  ament_target_dependencies(yaw_manifold_test plvins_common camera_model rclcpp sensor_msgs std_msgs geometry_msgs nav_msgs visualization_msgs cv_bridge ament_index_cpp std_srvs)
+  target_link_libraries(yaw_manifold_test Eigen3::Eigen Ceres::ceres ${OpenCV_LIBS})
+endif()
+ament_package()

@@ -1,19 +1,21 @@
+#include <plvins_common/ros.hpp>
 #pragma once
 
 #include <thread>
+#include <atomic>
 #include <mutex>
 #include <opencv2/opencv.hpp>
-#include <eigen3/Eigen/Dense>
+#include <Eigen/Dense>
 #include <string>
 #include <ceres/ceres.h>
 #include <ceres/rotation.h>
 #include <queue>
 #include <assert.h>
-#include <nav_msgs/Path.h>
-#include <geometry_msgs/PointStamped.h>
-#include <nav_msgs/Odometry.h>
+#include <nav_msgs/msg/path.hpp>
+#include <geometry_msgs/msg/point_stamped.hpp>
+#include <nav_msgs/msg/odometry.hpp>
 #include <stdio.h>
-#include <ros/ros.h>
+
 #include "keyframe.h"
 #include "utility/tic_toc.h"
 #include "utility/utility.h"
@@ -37,14 +39,15 @@ class PoseGraph
 public:
 	PoseGraph();
 	~PoseGraph();
-	void registerPub(ros::NodeHandle &n);
+	void stop();
+	void registerPub(const rclcpp::Node::SharedPtr &n);
 	void addKeyFrame(KeyFrame* cur_kf, bool flag_detect_loop);
 	void loadKeyFrame(KeyFrame* cur_kf, bool flag_detect_loop);
 	void loadVocabulary(std::string voc_path);
 	void updateKeyFrameLoop(int index, Eigen::Matrix<double, 8, 1 > &_loop_info);
 	KeyFrame* getKeyFrame(int index);
-	nav_msgs::Path path[10];
-	nav_msgs::Path base_path;
+	nav_msgs::msg::Path path[10];
+	nav_msgs::msg::Path base_path;
 	CameraPoseVisualization* posegraph_visualization;
 	void savePoseGraph();
 	void loadPoseGraph();
@@ -68,6 +71,7 @@ private:
 	std::mutex m_path;
 	std::mutex m_drift;
 	std::thread t_optimization;
+	std::atomic<bool> stopping_{false};
 	std::queue<int> optimize_buf;
 
 	int global_index;
@@ -80,10 +84,10 @@ private:
 	BriefDatabase db;
 	BriefVocabulary* voc;
 
-	ros::Publisher pub_pg_path;
-	ros::Publisher pub_base_path;
-	ros::Publisher pub_pose_graph;
-	ros::Publisher pub_path[10];
+rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr pub_pg_path;
+rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr pub_base_path;
+rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr pub_pose_graph;
+rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr pub_path[10];
 };
 
 template <typename T>
@@ -96,23 +100,15 @@ T NormalizeAngle(const T& angle_degrees) {
   	return angle_degrees;
 };
 
-class AngleLocalParameterization {
- public:
-
-  template <typename T>
-  bool operator()(const T* theta_radians, const T* delta_theta_radians,
-                  T* theta_radians_plus_delta) const {
-    *theta_radians_plus_delta =
-        NormalizeAngle(*theta_radians + *delta_theta_radians);
-
-    return true;
+struct AngleRetraction {
+  template<class T> bool Plus(const T* x, const T* d, T* out) const {
+    out[0] = NormalizeAngle(x[0] + d[0]); return true;
   }
-
-  static ceres::LocalParameterization* Create() {
-    return (new ceres::AutoDiffLocalParameterization<AngleLocalParameterization,
-                                                     1, 1>);
+  template<class T> bool Minus(const T* y, const T* x, T* out) const {
+    out[0] = NormalizeAngle(y[0] - x[0]); return true;
   }
 };
+using AngleManifold = ceres::AutoDiffManifold<AngleRetraction, 1, 1>;
 
 template <typename T> 
 void YawPitchRollToRotationMatrix(const T yaw, const T pitch, const T roll, T R[9])
