@@ -1,28 +1,14 @@
-cmake_minimum_required(VERSION 2.8.3)
-project(benchmark_publisher)
-
-set(CMAKE_BUILD_TYPE "Release")
-set(CMAKE_CXX_FLAGS "-std=c++11 -DEIGEN_DONT_PARALLELIZE")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -g -rdynamic")
-
-
-find_package(catkin REQUIRED COMPONENTS
-    roscpp
-    tf
-    )
-
-catkin_package()
-include_directories(${catkin_INCLUDE_DIRS}) 
-
-set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
-find_package(Eigen3  REQUIRED)
-include_directories(
-  ${catkin_INCLUDE_DIRS}
-  ${EIGEN3_INCLUDE_DIR}
-)
-
-add_executable(benchmark_publisher
-    src/benchmark_publisher_node.cpp
-    )
-
-target_link_libraries(benchmark_publisher ${catkin_LIBRARIES})
+cmake_minimum_required(VERSION 3.22)
+project(benchmark_publisher VERSION 0.1.0 LANGUAGES CXX)
+include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/Dependencies.cmake)
+find_package(ament_cmake REQUIRED)
+find_package(plvins_common REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+add_executable(benchmark_publisher src/benchmark_publisher_node.cpp)
+ament_target_dependencies(benchmark_publisher plvins_common rclcpp geometry_msgs nav_msgs)
+target_link_libraries(benchmark_publisher Eigen3::Eigen)
+install(TARGETS benchmark_publisher DESTINATION lib/${PROJECT_NAME})
+install(DIRECTORY launch DESTINATION share/${PROJECT_NAME} FILES_MATCHING PATTERN "*.launch.py")
+ament_package()
