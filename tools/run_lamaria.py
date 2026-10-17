@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Replay a LaMAria ROS 2 MCAP sequence and evaluate it with EVO."""
 import argparse
+from datetime import datetime, timezone
 import json
 import math
 import os
 from pathlib import Path
+import re
 import shutil
 import signal
 import subprocess
@@ -13,6 +15,7 @@ import time
 
 
 def quaternion_matrix(q):
+    # Internal poses use [w, x, y, z].
     w, x, y, z = q
     norm = math.sqrt(w*w + x*x + y*y + z*z)
     if norm == 0:
@@ -33,7 +36,8 @@ def write_config(calibration_path, output_path, loop_closure=False):
     width = int(camera['resolution']['width'])
     height = int(camera['resolution']['height'])
     extrinsic = camera['T_b_s']
-    rotation = quaternion_matrix(extrinsic['qvec'])
+    q_xyzw = extrinsic['qvec']
+    rotation = quaternion_matrix([q_xyzw[3], *q_xyzw[:3]])
     translation = extrinsic['tvec']
     rate = float(imu['imu_rate'])
     # PL-VINS expects per-sample standard deviations; LaMAria supplies Kalibr
@@ -133,7 +137,7 @@ def write_reference(source, output):
 def transform_estimate(source, output, extrinsic):
     """Convert PL-VINS world_from_imu poses to LaMAria world_from_cam0 poses."""
     poses = read_poses(source)
-    q_ic = extrinsic['qvec']  # LaMAria calibration quaternion order is w, x, y, z.
+    q_ic = extrinsic['qvec']  # LaMAria stores calibration quaternions as x, y, z, w.
     t_ic = extrinsic['tvec']
     with output.open('w') as stream:
         for row in poses:
@@ -143,7 +147,7 @@ def transform_estimate(source, output, extrinsic):
             t_wc = [t[i] + sum(r_wi[i][j] * t_ic[j] for j in range(3)) for i in range(3)]
             # Hamilton product q_wc = q_wi * q_ic.
             w, x, y, z = q_wi
-            a, b, c, d = q_ic
+            b, c, d, a = q_ic
             q_wc = [w*a-x*b-y*c-z*d, w*b+x*a+y*d-z*c,
                     w*c-x*d+y*a+z*b, w*d+x*c-y*b+z*a]
             norm = math.sqrt(sum(v*v for v in q_wc))
@@ -186,21 +190,61 @@ def wait_for_nodes(process, log_path, timeout):
 
 
 def run_evo(reference, estimate, out_dir):
+    plot_config = out_dir / 'evo_headless_config.json'
+    plot_config.write_text(json.dumps({'plot_backend': 'Agg'}, indent=2) + '\n')
     commands = [
         ('ape', ['evo_ape', 'tum', str(reference), str(estimate), '--align',
-                 '--save_results', str(out_dir / 'ape.zip')]),
+                 '--save_results', str(out_dir / 'ape.zip'),
+                 '--save_plot', str(out_dir / 'ape.png'), '--config', str(plot_config)]),
         ('rpe_translation', ['evo_rpe', 'tum', str(reference), str(estimate), '--align',
                  '--pose_relation', 'trans_part', '--delta', '1', '--delta_unit', 'm',
-                 '--save_results', str(out_dir / 'rpe_translation.zip')]),
+                 '--save_results', str(out_dir / 'rpe_translation.zip'),
+                 '--save_plot', str(out_dir / 'rpe_translation.png'),
+                 '--config', str(plot_config)]),
         ('rpe_rotation', ['evo_rpe', 'tum', str(reference), str(estimate), '--align',
                  '--pose_relation', 'angle_deg', '--delta', '1', '--delta_unit', 'm',
-                 '--save_results', str(out_dir / 'rpe_rotation.zip')]),
+                 '--save_results', str(out_dir / 'rpe_rotation.zip'),
+                 '--save_plot', str(out_dir / 'rpe_rotation.png'),
+                 '--config', str(plot_config)]),
     ]
+    # EVO asks Matplotlib to render its plots, but force a noninteractive
+    # backend so this also works on headless machines and never opens windows.
+    env = os.environ.copy()
+    env['MPLBACKEND'] = 'Agg'
     for name, command in commands:
-        result = subprocess.run(command, text=True, capture_output=True)
+        result = subprocess.run(command, text=True, capture_output=True, env=env)
         (out_dir / f'{name}.txt').write_text(result.stdout + result.stderr)
         if result.returncode:
             raise RuntimeError(f"{command[0]} failed; see {out_dir / f'{name}.txt'}")
+        missing = [f'{name}_{figure}.png' for figure in ('raw', 'map')
+                   if not (out_dir / f'{name}_{figure}.png').is_file()]
+        if missing:
+            raise RuntimeError(f"{command[0]} did not save expected plots: {', '.join(missing)}")
+
+
+def create_run_dir(output_root, sequence, playback_rate, loop_closure, run_label=None):
+    """Create a collision-safe, descriptive output directory for one replay."""
+    timestamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+    rate = format(playback_rate, 'g').replace('.', 'p')
+    parts = [timestamp]
+    if run_label:
+        label = re.sub(r'[^A-Za-z0-9._-]+', '-', run_label).strip('-._')
+        if not label:
+            raise ValueError('--run-label must include a letter or number')
+        parts.append(label)
+    parts.extend((f'rate-{rate}', f'lc-{int(loop_closure)}'))
+    base_name = '_'.join(parts)
+    sequence_root = output_root / sequence
+    sequence_root.mkdir(parents=True, exist_ok=True)
+    for suffix in range(1000):
+        run_name = base_name if suffix == 0 else f'{base_name}_{suffix:03d}'
+        out_dir = sequence_root / run_name
+        try:
+            out_dir.mkdir()
+        except FileExistsError:
+            continue
+        return out_dir
+    raise RuntimeError(f'could not allocate a unique run directory under {sequence_root}')
 
 
 def main():
@@ -211,6 +255,7 @@ def main():
     parser.add_argument('--calibration', type=Path, help='pinhole calibration JSON; defaults to SEQUENCE/SEQUENCE.json')
     parser.add_argument('--groundtruth', type=Path, help='dense pGT text; defaults to SEQUENCE/SEQUENCE.txt')
     parser.add_argument('--output-root', type=Path, default=Path('results/lamaria'))
+    parser.add_argument('--run-label', help='optional short label included in this run folder name')
     parser.add_argument('--playback-rate', type=float, default=0.5)
     parser.add_argument('--startup-timeout', type=int, default=90)
     parser.add_argument('--loop-closure', action='store_true')
@@ -242,12 +287,22 @@ def main():
         prior = env.get('LD_LIBRARY_PATH', '')
         env['LD_LIBRARY_PATH'] = str(vendor_lib) + (os.pathsep + prior if prior else '')
 
-    out_dir = args.output_root / args.sequence
     try:
-        out_dir.mkdir(parents=True, exist_ok=False)
-    except FileExistsError:
-        parser.error(f'output already exists (will not overwrite): {out_dir}')
-    try:
+        out_dir = create_run_dir(args.output_root, args.sequence, args.playback_rate,
+                                 args.loop_closure, args.run_label)
+        metadata = {
+            'run_id': out_dir.name,
+            'started_utc': datetime.now(timezone.utc).isoformat(),
+            'sequence': args.sequence,
+            'dataset_root': str(args.dataset_root.resolve()),
+            'bag': str(bag_dir.resolve()),
+            'calibration': str(calibration.resolve()),
+            'groundtruth': str(groundtruth.resolve()),
+            'playback_rate': args.playback_rate,
+            'loop_closure': args.loop_closure,
+            'evaluation_enabled': not args.no_evaluate,
+        }
+        (out_dir / 'run.json').write_text(json.dumps(metadata, indent=2) + '\n')
         extrinsic = write_config(calibration, out_dir / 'config.yaml', args.loop_closure)
         reference = out_dir / 'reference_cam0_tum.txt'
         write_reference(groundtruth, reference)
@@ -281,8 +336,11 @@ def main():
         return 1
     print(f'Run artifacts: {out_dir}')
     if not args.no_evaluate:
-        print(f'EVO APE: {out_dir / "ape.txt"}')
-        print(f'EVO RPE: {out_dir / "rpe_translation.txt"}, {out_dir / "rpe_rotation.txt"}')
+        print(f'EVO APE: {out_dir / "ape.txt"}; plots {out_dir / "ape_raw.png"}, '
+              f'{out_dir / "ape_map.png"}')
+        print(f'EVO RPE: {out_dir / "rpe_translation.txt"} and {out_dir / "rpe_rotation.txt"}; '
+              f'plots {out_dir / "rpe_translation_raw.png"}, {out_dir / "rpe_translation_map.png"}, '
+              f'{out_dir / "rpe_rotation_raw.png"}, {out_dir / "rpe_rotation_map.png"}')
     return 0
 
 
