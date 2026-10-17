@@ -1,4 +1,15 @@
 *~
 .vscode/
 */.vscode/
+.deps/
+build/
+install/
+log/
+**/.idea/
+**/__pycache__/
+*.pyc
+*.so
+data/
+results/
+.venv/
 

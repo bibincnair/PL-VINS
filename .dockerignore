@@ -1,0 +1,9 @@
+.git
+.deps
+.venv
+build
+install
+log
+data
+results
+**/__pycache__

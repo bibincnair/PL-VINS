@@ -1,0 +1,95 @@
+{
+  "platform": "ubuntu:24.04",
+  "ros_distribution": "jazzy",
+  "sources": {
+    "opencv": {
+      "version": "5.0.0",
+      "url": "https://codeload.github.com/opencv/opencv/tar.gz/5.0.0",
+      "sha256": "b0528f5a1d379d59d4701cb28c36e22214cc51cf64594e5b56f2d3e6c0233095",
+      "cmake_options": [
+        "-DBUILD_LIST=core,imgproc,imgcodecs,video,features,calib,geometry,highgui",
+        "-DBUILD_TESTS=OFF",
+        "-DBUILD_PERF_TESTS=OFF",
+        "-DBUILD_EXAMPLES=OFF",
+        "-DBUILD_opencv_python3=OFF",
+        "-DWITH_CUDA=OFF",
+        "-DWITH_QT=OFF",
+        "-DWITH_GTK=ON",
+        "-DWITH_OPENCL=OFF",
+        "-DOPENCV_GENERATE_PKGCONFIG=ON"
+      ]
+    },
+    "ceres": {
+      "version": "2.2.0",
+      "url": "https://codeload.github.com/ceres-solver/ceres-solver/tar.gz/2.2.0",
+      "sha256": "12efacfadbfdc1bbfa203c236e96f4d3c210bed96994288b3ff0c8e7c6f350d4",
+      "cmake_options": [
+        "-DBUILD_TESTING=OFF",
+        "-DBUILD_EXAMPLES=OFF",
+        "-DBUILD_BENCHMARKS=OFF",
+        "-DBUILD_SHARED_LIBS=ON",
+        "-DUSE_CUDA=OFF",
+        "-DGFLAGS=OFF",
+        "-DLAPACK=OFF",
+        "-DEIGENMETIS=OFF"
+      ]
+    },
+    "glog": {
+      "version": "v0.7.1",
+      "url": "https://codeload.github.com/google/glog/tar.gz/v0.7.1",
+      "sha256": "00e4a87e87b7e7612f519a41e491f16623b12423620006f59f5688bfd8d13b08",
+      "cmake_options": [
+        "-DBUILD_TESTING=OFF",
+        "-DWITH_GFLAGS=OFF"
+      ]
+    },
+    "suitesparse": {
+      "version": "v7.14.1",
+      "url": "https://codeload.github.com/DrTimothyAldenDavis/SuiteSparse/tar.gz/v7.14.1",
+      "sha256": "81e560e1f74546df139edb765b3f5bc865866da23062312ffe8fd821063c8397",
+      "cmake_options": [
+        "-DSUITESPARSE_ENABLE_PROJECTS=suitesparse_config;amd;camd;colamd;ccolamd;cholmod;spqr",
+        "-DSUITESPARSE_USE_CUDA=OFF",
+        "-DSUITESPARSE_DEMOS=OFF",
+        "-DBUILD_TESTING=OFF"
+      ]
+    },
+    "cv_bridge": {
+      "version": "4.1.0",
+      "url": "https://codeload.github.com/ros-perception/vision_opencv/tar.gz/4.1.0",
+      "sha256": "9b62869915c450d9477d0a4e5b8d1ba4686772d51fb0b379835c3fd465c37ec1",
+      "cmake_options": [
+        "-DBUILD_TESTING=OFF",
+        "-DCV_BRIDGE_DISABLE_PYTHON=ON",
+        "-DPython3_EXECUTABLE=/usr/bin/python3"
+      ]
+    },
+    "eigen": {
+      "version": "5.0.1",
+      "url": "https://gitlab.com/libeigen/eigen/-/archive/5.0.1/eigen-5.0.1.tar.gz",
+      "sha256": "e9c326dc8c05cd1e044c71f30f1b2e34a6161a3b6ecf445d56b53ff1669e3dec",
+      "cmake_options": [
+        "-DEIGEN_BUILD_TESTING=OFF",
+        "-DEIGEN_BUILD_DOC=OFF",
+        "-DEIGEN_BUILD_BLAS=OFF",
+        "-DEIGEN_BUILD_LAPACK=OFF"
+      ]
+    },
+    "boost": {
+      "version": "1.92.0",
+      "url": "https://archives.boost.io/release/1.92.0/source/boost_1_92_0.tar.bz2",
+      "sha256": "5c1d40cb8e19adbf740a4ec2da35b3e58f3f5804b1dce44deb53df72193cbc6c"
+    }
+  },
+  "compatibility_patches": {
+    "ceres": [
+      "Require the locked Eigen 5.0.1 CMake package instead of Eigen 3.3."
+    ],
+    "cv_bridge": [
+      "Find OpenCV 5 instead of OpenCV 4.",
+      "Use pinned Boost headers; disable Python bindings.",
+      "Replace removed imgproc/types_c.h with the C++ imgproc.hpp header."
+    ]
+  },
+  "cxx_standard": 17
+}

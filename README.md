@@ -1,96 +1,95 @@
-# PL-VINS: Real-Time Monocular Visual-Inertial SLAM with Point and Line Features
+# PL-VINS for ROS 2 Jazzy
 
-[PL-VINS](https://arxiv.org/pdf/2009.07462.pdf) can yield higher accuracy than VINS-Mono (2018 IROS best Paper, TRO Honorable Mention Best Paper) at the same run rate on a low-power CPU Intel Core i7-10710U @1.10 GHz. 
+Monocular visual-inertial SLAM using point and line features, with optional
+BRIEF/DBoW loop closure. This migration targets Ubuntu 24.04, ROS 2 Jazzy and
+C++17. See [architecture](docs/architecture.md) for the processing pipeline and
+[external data](docs/data.md) for datasets and historical result recovery.
 
-Thank Jialong Wang (Baidu) for helping me code this system, he makes a huge contribution in this work. 
+## Build
 
-![image](https://github.com/cnqiangfu/PL-VINS/blob/master/support_files/plvins-vinsmono.png)
+Install ROS 2 Jazzy and the build prerequisites listed in `Dockerfile`, then run:
 
-
-This respository is an initial version, it will be improved further in the coming months.
-
-
-**DemoShow**: [youtube](https://youtu.be/MPf6HufbgdE) or [bilibili](https://www.bilibili.com/video/BV1464y1F7hk/)
-
-[![PL-VINS](https://img.youtube.com/vi/MPf6HufbgdE/0.jpg)](https://youtu.be/MPf6HufbgdE)
-
-## 1. Prerequisites
-1.1 **Ubuntu** and **ROS**
-
-Ubuntu 18.04. ROS Melodic, please google it.
-
-1.2. **Dependency**
-
-Eigen 3.3.4 + OpenCV 3.2+ Cere-solver: [Ceres Installation](http://ceres-solver.org/installation.html), remember to **sudo make install**.
-
-## 2. Build PL-VINS on ROS
-Clone the repository and catkin_make (# note that you will create a new workspace named *catkin_plvins*):
-```
-	mkdir -p ~/catkin_plvins/src    
-	cd ~/catkin_plvins/
-	catkin_make
-	source devel/setup.bash
-	echo $ROS_PACKAGE_PATH             # test you have created it successfully
-	git clone https://github.com/cnqiangfu/PL-VINS.git
-```
-**Notice**: before the second catkin_make, you need to go through /PL-VINS/feature_tracker/CMakeLists.txt, see the sign **# Important** in the CMakeLists.txt, and modify two absolute paths to correctly find the modified LSD algorithm. You also need to make sure OpenCV 3.2 there.
-
-```	
-	catkin_make
-	source devel/setup.bash
+```bash
+bash tools/build.sh
+source tools/setup.bash
 ```
 
-## 3. Run on EuRoC dataset
+The build downloads checksum-verified sources pinned in `dependencies.lock.json`:
+OpenCV 5.0.0, Eigen 5.0.1, Ceres 2.2.0, SuiteSparse 7.14.1, Boost 1.92.0 headers,
+and glog 0.7.1. The Jazzy `cv_bridge` 4.1.0 C++ library is rebuilt against OpenCV 5.
+Compatibility changes are applied by the bootstrap script and recorded in the
+lock file. Dependencies install locally under `.deps/install`; no `sudo make
+install` or developer-specific paths are required. Set `PLVINS_JOBS` to control
+compiler concurrency.
 
-Download [EuRoC MAV Dataset](http://projects.asl.ethz.ch/datasets/doku.php?id=kmavvisualinertialdatasets). We suggust you select difficult sequences to test.
+Alternatively, `docker build -t plvins:jazzy .` builds the same source tree and
+pinned libraries. Mount external datasets and a writable result directory when
+running the container. Container GUI forwarding is optional.
 
-run in the ~/catkin_plvins/
-```
-	roslaunch plvins_estimator plvins_show_linepoint.launch
-	rosbag play YOUR_PATH_TO_DATASET/MH_05_difficult.bag
-```
-or 
-```
-roslaunch plvins_estimator euroc_fix_extrinsic.launch        #This launch runs without loop
-```
+Python tools use a separate environment with pinned, hashed dependencies:
 
-Now you should be able to run PL-VINS in the ROS RViZ. 
-
-**Note that**: if you want obtain motion trajectory and compare it to your method. Please modify the ouput paths: /PL-VINS/vins_estimator/src/visualization.cpp (trajectory without loop) and /PL-VINS/pose_graph/src/pose_graph.cpp (trajectory with loop). 
-
-**Note that**:It is an interesting thing we find that different CPU maybe yield different result whether VINS-Mono or PL-VINS, maybe the reason of ROS mechanism. Therefore, we suggest you test or compare methods on your machine by yourself. 
-
-
-## 4. Related Papers
-
-- **PL-VINS: Real-Time Monocular Visual-Inertial SLAM with Point and Line**.
-
-```
-@misc{fu2020plvins,
-      title={PL-VINS: Real-Time Monocular Visual-Inertial SLAM with Point and Line Features}, 
-      author={Qiang Fu and Jialong Wang and Hongshan Yu and Islam Ali and Feng Guo and Yijia He and Hong Zhang},
-      year={2020},
-      eprint={2009.07462},
-      archivePrefix={arXiv},
-      primaryClass={cs.RO}
-}
+```bash
+python3 -m venv --system-site-packages .venv
+.venv/bin/pip install --require-hashes -r requirements.lock
 ```
 
-This paper is developed based on PL-VIO [1], VINS-Mono [2], and [3].
+Source `tools/setup.bash` before using ROS Python tools. Python OpenCV and the
+Python `cv_bridge` extension are not required.
+
+## Run
+
+```bash
+ros2 launch plvins_estimator plvins.launch.py \
+  use_sim_time:=true rviz:=true overlay:=true output_directory:=/tmp/plvins-results
+ros2 bag play data/MH_01_easy_ros2 --clock
 ```
-[1] Pl-vio: Tightly-coupled monocular visual-inertial odometry using point and line features
 
-[2] Vins-mono: A robust and versatile monocular visual-inertial state estimator
+The default camera calibration is EuRoC. Select another installed or external
+OpenCV YAML using `config_file:=/absolute/path/to/calibration.yaml`. Use
+`loop_closure:=false` to disable the pose graph. For a live camera, leave
+`use_sim_time:=false` and configure the camera and IMU topics in the calibration
+file. Sensor inputs use best-effort QoS; internal feature messages use reliable
+QoS. See [architecture](docs/architecture.md) for feature channel layouts.
 
-[3] A robust RGB-D SLAM system with points and lines for low texture indoor environments
+The estimator writes `trajectory_tum.txt` (seconds, xyz, qxyzw) and
+`trajectory_ns.txt` (nanoseconds) into `output_directory`. The pose graph writes
+its loop trajectories there and saves its graph under `pose_graph/` by default.
+Override the latter with `pose_graph_directory` when loading an existing graph.
+
+```bash
+ros2 service call /pose_graph/save_graph std_srvs/srv/Trigger '{}'
+ros2 service call /pose_graph/new_sequence std_srvs/srv/Trigger '{}'
+ros2 launch plvins_estimator simulation.launch.py \
+  data_directory:=$PWD/data/config/simdata/data
+ros2 launch benchmark_publisher publish.launch.py \
+  data_name:=$PWD/data/benchmark_publisher/config/MH_01_easy/data.csv
+ros2 run camera_model camera_calibration --help
+.venv/bin/python pythontool/draw_trajcory.py results/trajectory_tum.txt --output trajectory.png
 ```
 
-*If you find aforementioned works helpful for your research, please cite them.*
+## Validate
 
-## 5. Acknowledgements
+```bash
+source tools/setup.bash
+colcon test --event-handlers console_direct+
+colcon test-result --verbose
+python3 tools/check_linkage.py
+.venv/bin/python -m unittest discover -s tests -p 'test_*.py'
+```
 
-Thank Dr. Yijia He, Ji Zhao, Yue Guo, Wenhao He, and Kui Yuan(PL-VIO); Dr. Qin Tong, Dr. Peiliang Li, and Prof. Shen (VINS-Mono) very much.
+Run `.venv/bin/python tests/smoke_ros2.py` for the installed multi-node smoke test.
+See [recorded validation and limits](docs/validation.md) for the MH_05 replay results.
 
-## 6. Licence
-The source code is released under [GPLv3](http://www.gnu.org/licenses/) license.
+C++ tests check manifold identities and finite-difference point, line, IMU and
+marginalization derivatives. Python tests check timestamp precision and bag image
+round trips. Full accuracy/performance acceptance additionally requires replaying
+EuRoC MH_01 and MH_05 with loop closure enabled and disabled on the same hardware
+as a recorded legacy baseline; historical trajectories alone are not a timing
+baseline.
 
+## Research and license
+
+Based on [PL-VINS](https://arxiv.org/abs/2009.07462), PL-VIO and VINS-Mono.
+Please cite the original research when using this system. Original citation
+metadata is retained in `support_files/paper_bib.txt`. Project code is GPLv3;
+see `LICENCE` and third-party source notices for component licenses.
