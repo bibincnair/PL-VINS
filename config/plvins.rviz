@@ -1,0 +1,64 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ""
+  Global Options:
+    Fixed Frame: world
+    Background Color: 32; 32; 32
+    Frame Rate: 30
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Enabled: true
+      Cell Size: 1
+    - Class: rviz_default_plugins/Path
+      Name: VIO path
+      Enabled: true
+      Topic:
+        Value: /plvins_estimator/path
+        Reliability Policy: Reliable
+        Durability Policy: Volatile
+        Depth: 10
+    - Class: rviz_default_plugins/Path
+      Name: Loop-corrected path
+      Enabled: true
+      Topic:
+        Value: /pose_graph/pose_graph_path
+        Reliability Policy: Reliable
+        Durability Policy: Volatile
+        Depth: 10
+    - Class: rviz_default_plugins/Marker
+      Name: Lines
+      Enabled: true
+      Topic:
+        Value: /plvins_estimator/lines_cloud
+        Reliability Policy: Reliable
+        Depth: 10
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Camera poses
+      Enabled: true
+      Topic:
+        Value: /plvins_estimator/camera_pose_visual
+        Reliability Policy: Reliable
+        Depth: 10
+    - Class: rviz_default_plugins/PointCloud
+      Name: Landmarks
+      Enabled: true
+      Size (Pixels): 3
+      Topic:
+        Value: /plvins_estimator/point_cloud
+        Reliability Policy: Reliable
+        Depth: 10
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 10
+      Pitch: 0.6
+      Yaw: 0.8
+Window Geometry:
+  Width: 1280
+  Height: 800

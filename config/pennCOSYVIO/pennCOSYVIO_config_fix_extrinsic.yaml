@@ -3,7 +3,6 @@
 #common parameters
 imu_topic: "/IMU/imu_raw"
 image_topic: "/camera/image_raw"
-output_path: "/config/pennCOSYVIO/vins_result.txt"         # vins outputs will be wrttento vins_folder_path + output_path
 
 #camera calibration   # KANNALA_BRANDT , PINHOLE
 model_type: PINHOLE
@@ -27,7 +26,6 @@ projection_parameters:
 estimate_extrinsic: 0   # 0  Have an accurate extrinsic parameters. We will trust the following imu^R_cam, imu^T_cam, don't change it.
                         # 1  Have an initial guess about extrinsic parameters. We will optimize around your initial guess.
                         # 2  Don't know anything about extrinsic parameters. You don't need to give R,T. We will try to calibrate it. Do some rotation movement at beginning. 
-ex_calib_result_path: "/config/pennCOSYVIO/ex_calib_result.yaml"  # If you choose 1 or 2, the extrinsic calibration result will be written vins_folder_path + ex_calib_result_path.                        
 #If you choose 0 or 1, you should write down the following matrix.
 #Rotation from camera frame to imu frame, imu^R_cam
 extrinsicRotation: !!opencv-matrix
