@@ -1,96 +1,71 @@
-# PL-VINS for ROS 2 Jazzy
+# PL-VINS on ROS 2 Jazzy
 
-Monocular visual-inertial SLAM using point and line features, with optional
-BRIEF/DBoW loop closure. This migration targets Ubuntu 24.04, ROS 2 Jazzy and
-C++17. See [architecture](docs/architecture.md) for the processing pipeline and
-[external data](docs/data.md) for datasets and historical result recovery.
+I ported PL-VINS to ROS 2 Jazzy and updated its build for Ubuntu 24.04 and
+C++17. It estimates motion from point and line features, with optional loop
+closure.
+
+I kept the previous README here: [README.original.md](README.original.md).
+For more detail, see [the architecture notes](docs/architecture.md) and
+[LaMAria replay notes](docs/lamaria.md).
+
+## What I changed
+
+- I moved the runtime to ROS 2 packages, launch files, parameters, services,
+  publishers, and subscribers. The estimator and feature tracker use ROS 2
+  messages, simulated time, and sensor QoS.
+- I pinned the updated build dependencies: OpenCV 5.0, Eigen 5.0, Ceres 2.2,
+  SuiteSparse 7.14, Boost 1.92, glog 0.7, and `cv_bridge` 4.1. I also added
+  compatibility patches for the newer OpenCV and Eigen APIs.
 
 ## Build
 
-Install ROS 2 Jazzy and the build prerequisites listed in `Dockerfile`, then run:
+With ROS 2 Jazzy installed, build and set up the workspace:
 
 ```bash
 bash tools/build.sh
 source tools/setup.bash
 ```
 
-The build downloads checksum-verified sources pinned in `dependencies.lock.json`:
-OpenCV 5.0.0, Eigen 5.0.1, Ceres 2.2.0, SuiteSparse 7.14.1, Boost 1.92.0 headers,
-and glog 0.7.1. The Jazzy `cv_bridge` 4.1.0 C++ library is rebuilt against OpenCV 5.
-Compatibility changes are applied by the bootstrap script and recorded in the
-lock file. Dependencies install locally under `.deps/install`; no `sudo make
-install` or developer-specific paths are required. Set `PLVINS_JOBS` to control
-compiler concurrency.
-
-Alternatively, `docker build -t plvins:jazzy .` builds the same source tree and
-pinned libraries. Mount external datasets and a writable result directory when
-running the container. Container GUI forwarding is optional.
-
-Python tools use a separate environment with pinned, hashed dependencies:
+Install the Python tools, including EVO, in the local environment:
 
 ```bash
 python3 -m venv --system-site-packages .venv
-.venv/bin/pip install --require-hashes -r requirements.lock
+.venv/bin/pip install --require-hashes -r requirements.lock -r requirements-evo.lock
 ```
 
-Source `tools/setup.bash` before using ROS Python tools. Python OpenCV and the
-Python `cv_bridge` extension are not required.
+## Run LaMAria
 
-## Run
-
-```bash
-ros2 launch plvins_estimator plvins.launch.py \
-  use_sim_time:=true rviz:=true overlay:=true output_directory:=/tmp/plvins-results
-ros2 bag play data/MH_01_easy_ros2 --clock
-```
-
-The default camera calibration is EuRoC. Select another installed or external
-OpenCV YAML using `config_file:=/absolute/path/to/calibration.yaml`. Use
-`loop_closure:=false` to disable the pose graph. For a live camera, leave
-`use_sim_time:=false` and configure the camera and IMU topics in the calibration
-file. Sensor inputs use best-effort QoS; internal feature messages use reliable
-QoS. See [architecture](docs/architecture.md) for feature channel layouts and
-[LaMAria replay and EVO metrics](docs/lamaria.md) for the installed ROS 2 bags.
-
-The estimator writes `trajectory_tum.txt` (seconds, xyz, qxyzw) and
-`trajectory_ns.txt` (nanoseconds) into `output_directory`. The pose graph writes
-its loop trajectories there and saves its graph under `pose_graph/` by default.
-Override the latter with `pose_graph_directory` when loading an existing graph.
-
-```bash
-ros2 service call /pose_graph/save_graph std_srvs/srv/Trigger '{}'
-ros2 service call /pose_graph/new_sequence std_srvs/srv/Trigger '{}'
-ros2 launch plvins_estimator simulation.launch.py \
-  data_directory:=$PWD/data/config/simdata/data
-ros2 launch benchmark_publisher publish.launch.py \
-  data_name:=$PWD/data/benchmark_publisher/config/MH_01_easy/data.csv
-ros2 run camera_model camera_calibration --help
-.venv/bin/python pythontool/draw_trajcory.py results/trajectory_tum.txt --output trajectory.png
-```
-
-## Validate
+After the dataset is available under `/datasets/lamaraia`, run a sequence:
 
 ```bash
 source tools/setup.bash
-colcon test --event-handlers console_direct+
-colcon test-result --verbose
-python3 tools/check_linkage.py
-.venv/bin/python -m unittest discover -s tests -p 'test_*.py'
+.venv/bin/python tools/run_lamaria.py \
+  --dataset-root /datasets/lamaraia \
+  --sequence R_01_easy \
+  --output-root results/lamaria
 ```
 
-Run `.venv/bin/python tests/smoke_ros2.py` for the installed multi-node smoke test.
-See [recorded validation and limits](docs/validation.md) for the MH_05 replay results.
+Each run gets a new folder under the sequence, named with its UTC start time,
+playback rate, and loop-closure setting. The runner keeps earlier runs and
+saves the trajectories, ROS logs, EVO summaries, result archives, and plots.
+Add `--run-label retry3` if you want a short label in the folder name. Use
+`--loop-closure` to enable loop closure or `--no-evaluate` to skip EVO.
 
-C++ tests check manifold identities and finite-difference point, line, IMU and
-marginalization derivatives. Python tests check timestamp precision and bag image
-round trips. Full accuracy/performance acceptance additionally requires replaying
-EuRoC MH_01 and MH_05 with loop closure enabled and disabled on the same hardware
-as a recorded legacy baseline; historical trajectories alone are not a timing
-baseline.
+## Example results
 
-## Research and license
+This is one saved `R_01_easy` run at 0.5x playback with loop closure off. APE is
+translation error after SE(3) alignment. RPE is measured over 1 m. These are
+example results against LaMAria's dense pseudo-ground-truth, not the official
+control-point benchmark score.
 
-Based on [PL-VINS](https://arxiv.org/abs/2009.07462), PL-VIO and VINS-Mono.
-Please cite the original research when using this system. Original citation
-metadata is retained in `support_files/paper_bib.txt`. Project code is GPLv3;
-see `LICENCE` and third-party source notices for component licenses.
+| Metric | Mean | RMSE | Plot |
+|---|---:|---:|---|
+| APE translation (m) | 0.969 | 1.022 | <img src="docs/images/lamaria-r01-ape-map.png" alt="APE mapped onto the trajectory" width="360"> |
+| RPE translation per 1 m (m) | 1.378 | 1.429 | <img src="docs/images/lamaria-r01-rpe-translation.png" alt="Translation RPE over time" width="360"> |
+
+The same run's rotation RPE over 1 m was 13.433° mean and 20.858° RMSE.
+
+## License
+
+This project is GPLv3; see [LICENCE](LICENCE). I retain the original research
+citation in [support_files/paper_bib.txt](support_files/paper_bib.txt).
