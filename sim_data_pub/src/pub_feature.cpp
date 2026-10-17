@@ -1,182 +1,60 @@
-#include "ros/ros.h"
-#include <sensor_msgs/PointCloud.h>
+#include "dataset_io.h"
+#include <plvins_common/ros.hpp>
 
-#include <eigen3/Eigen/Core>
-#include <eigen3/Eigen/Geometry>
+#include <sensor_msgs/msg/point_cloud.hpp>
+
+#include <Eigen/Core>
+#include <Eigen/Geometry>
 #include <fstream>
 
 
 using namespace std;
 
 template <typename T>
-T readParam(ros::NodeHandle &n, std::string name)
+T readParam(const rclcpp::Node::SharedPtr &n, std::string name)
 {
-    T ans;
-    if (n.getParam(name, ans))
+    T ans{};
+    if (plvins::parameter(n, name, ans))
     {
-        ROS_INFO_STREAM("Loaded " << name << ": " << ans);
+        RCLCPP_INFO_STREAM(rclcpp::get_logger("plvins"), "Loaded " << name << ": " << ans);
     }
     else
     {
-        ROS_ERROR_STREAM("Failed to load " << name);
-        n.shutdown();
+        RCLCPP_ERROR_STREAM(rclcpp::get_logger("plvins"), "Failed to load " << name);
+        throw std::runtime_error("missing parameter: " + name);
     }
     return ans;
 }
 
-void LoadPose(std::string filename, std::vector<double>& timestamp,std::vector<Eigen::Vector3d>& gyros, std::vector<Eigen::Vector3d>& accs)
-{
-
-    std::ifstream f;
-    f.open(filename.c_str());
-
-    if(!f.is_open())
-    {
-        std::cerr << " can't open LoadFeatures file "<<std::endl;
-        return;
-    }
-
-    while (!f.eof()) {
-
-        std::string s;
-        std::getline(f,s);
-
-        if(! s.empty())
-        {
-            std::stringstream ss;
-            ss << s;
-
-            double time;
-            Eigen::Quaterniond q;
-            Eigen::Vector3d t;
-            Eigen::Vector3d gyro;
-            Eigen::Vector3d acc;
-
-            ss>>time;
-            ss>>q.w();
-            ss>>q.x();
-            ss>>q.y();
-            ss>>q.z();
-            ss>>t(0);
-            ss>>t(1);
-            ss>>t(2);
-            ss>>gyro(0);
-            ss>>gyro(1);
-            ss>>gyro(2);
-            ss>>acc(0);
-            ss>>acc(1);
-            ss>>acc(2);
-
-            timestamp.push_back(time);
-            gyros.push_back(gyro);
-            accs.push_back(acc);
-        }
-    }
-
-}
-
-void LoadPointObs(std::string filename, std::vector<Eigen::Vector2d>& obs)
-{
-
-    std::ifstream f;
-    f.open(filename.c_str());
-
-    if(!f.is_open())
-    {
-        std::cerr << " can't open LoadFeatures file "<<std::endl;
-        return;
-    }
-
-    while (!f.eof()) {
-
-        std::string s;
-        std::getline(f,s);
-
-        if(! s.empty())
-        {
-            std::stringstream ss;
-            ss << s;
-
-            Eigen::Vector3d p;
-            Eigen::Vector2d ob;
-            double  temp;
-            ss>>p(0);
-            ss>>p(1);
-            ss>>p(2);
-            ss>>temp;
-            ss>>ob(0);
-            ss>>ob(1);
-
-            obs.push_back(ob);
-
-        }
-    }
-
-}
-
-void LoadLineObs(std::string filename, std::vector<Eigen::Vector4d>& obs)
-{
-
-    std::ifstream f;
-    f.open(filename.c_str());
-
-    if(!f.is_open())
-    {
-        std::cerr << " can't open LoadFeatures file "<<std::endl;
-        return;
-    }
-
-    while (!f.eof()) {
-
-        std::string s;
-        std::getline(f,s);
-
-        if(! s.empty())
-        {
-            std::stringstream ss;
-            ss << s;
-
-            Eigen::Vector4d ob;
-            ss>>ob(0);
-            ss>>ob(1);
-            ss>>ob(2);
-            ss>>ob(3);
-
-            obs.push_back(ob);
-
-        }
-    }
-
-}
+using plvins::simulation::LoadPose;
+using plvins::simulation::LoadPointObs;
+using plvins::simulation::LoadLineObs;
 
 int main(int argc, char **argv)
 {
  
-    ros::init(argc, argv, "feature");
-    ros::NodeHandle n("~");
-    ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info);
+    rclcpp::init(argc, argv);
+    auto n = std::make_shared<rclcpp::Node>("feature");
     
-    ros::Publisher pub_pobs = n.advertise<sensor_msgs::PointCloud>("/feature_tracker/feature", 1000);
-    ros::Publisher pub_lobs = n.advertise<sensor_msgs::PointCloud>("/linefeature_tracker/linefeature", 1000);
+auto pub_pobs = n->create_publisher<sensor_msgs::msg::PointCloud>("/feature_tracker/feature", 1000);
+auto pub_lobs = n->create_publisher<sensor_msgs::msg::PointCloud>("/linefeature_tracker/linefeature", 1000);
 
-    ros::Rate loop_rate(30);
+    rclcpp::Rate loop_rate(30);
     std::vector<double> timestamp;
     std::vector<Eigen::Vector3d> gyros;
     std::vector<Eigen::Vector3d> accs;
 
     std::string sim_file;
-    if (!n.getParam("sim_file_path", sim_file))
-    {
-        sim_file = std::string("/home/hyj/my_slam/vio_sim/vio_pl_sim/bin/");
-    }
-    ROS_INFO_STREAM("Loaded " << "sim_file_path" << ": " << sim_file);
+    plvins::parameter(n,"sim_file_path",sim_file);
+    if (sim_file.empty() || !std::filesystem::is_directory(sim_file)) throw std::runtime_error("sim_file_path must name an external simulation directory");
+    sim_file=std::filesystem::absolute(sim_file).string()+"/";
 
     LoadPose(sim_file+"cam_pose.txt",timestamp, gyros, accs);
 
     sleep(1);   //等vins代码启动
-    ROS_INFO("START PUB POINTS AND LINES FEATRUE");
-    //while (ros::ok())
-    for (int i = 0; i < timestamp.size(); ++i)
+    RCLCPP_INFO(rclcpp::get_logger("plvins"), "START PUB POINTS AND LINES FEATRUE");
+    //while (rclcpp::ok())
+    for (int i = 0; rclcpp::ok() && i < timestamp.size(); ++i)
     {
 
         stringstream ss;
@@ -190,18 +68,18 @@ int main(int argc, char **argv)
         LoadLineObs(ss1.str(),lobs);
 
         // point feature
-        sensor_msgs::PointCloudPtr feature_points(new sensor_msgs::PointCloud);
-        sensor_msgs::ChannelFloat32 id_of_point;   //  feature id
-        sensor_msgs::ChannelFloat32 u_of_point;    //  u
-        sensor_msgs::ChannelFloat32 v_of_point;    //  v
+        sensor_msgs::msg::PointCloud::SharedPtr feature_points(new sensor_msgs::msg::PointCloud);
+        sensor_msgs::msg::ChannelFloat32 id_of_point;   //  feature id
+        sensor_msgs::msg::ChannelFloat32 u_of_point;    //  u
+        sensor_msgs::msg::ChannelFloat32 v_of_point;    //  v
 
-        ros::Time t(timestamp[i]);
+        auto t = plvins::stamp(timestamp[i]);
         feature_points->header.stamp = t;
         feature_points->header.frame_id = "world";
 
         for (int j = 0; j < pobs.size(); ++j) {
             int p_id = j;
-            geometry_msgs::Point32 p;
+            geometry_msgs::msg::Point32 p;
             p.x = pobs[j].x();
             p.y = pobs[j].y();
             p.z = 1;
@@ -214,14 +92,14 @@ int main(int argc, char **argv)
         feature_points->channels.push_back(id_of_point);
         feature_points->channels.push_back(u_of_point);
         feature_points->channels.push_back(v_of_point);
-        //ROS_DEBUG("publish %f, at %f", feature_points->header.stamp.toSec(), ros::Time::now().toSec());
-        pub_pobs.publish(feature_points);
+        //RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "publish %f, at %f", plvins::seconds(feature_points->header.stamp), rclcpp::Clock().now().seconds());
+        pub_pobs->publish(*feature_points);
 
         // line feature
-        sensor_msgs::PointCloudPtr feature_lines(new sensor_msgs::PointCloud);
-        sensor_msgs::ChannelFloat32 id_of_line;   //  feature id
-        sensor_msgs::ChannelFloat32 u_of_endpoint;    //  u
-        sensor_msgs::ChannelFloat32 v_of_endpoint;    //  v
+        sensor_msgs::msg::PointCloud::SharedPtr feature_lines(new sensor_msgs::msg::PointCloud);
+        sensor_msgs::msg::ChannelFloat32 id_of_line;   //  feature id
+        sensor_msgs::msg::ChannelFloat32 u_of_endpoint;    //  u
+        sensor_msgs::msg::ChannelFloat32 v_of_endpoint;    //  v
 
         feature_lines->header = feature_points->header;
         feature_lines->header.frame_id = "world";
@@ -230,7 +108,7 @@ int main(int argc, char **argv)
         {
 
             int p_id = j;
-            geometry_msgs::Point32 p;
+            geometry_msgs::msg::Point32 p;
             p.x = lobs[j](0);
             p.y = lobs[j](1);
             p.z = 1;
@@ -239,16 +117,16 @@ int main(int argc, char **argv)
             id_of_line.values.push_back((float)p_id);
             u_of_endpoint.values.push_back(lobs[j](2));
             v_of_endpoint.values.push_back(lobs[j](3));
-            //ROS_ASSERT(inBorder(cur_pts[j]));
+            //PLVINS_ASSERT(inBorder(cur_pts[j]));
         }
         feature_lines->channels.push_back(id_of_line);
         feature_lines->channels.push_back(u_of_endpoint);
         feature_lines->channels.push_back(v_of_endpoint);
-        pub_lobs.publish(feature_lines);
+        pub_lobs->publish(*feature_lines);
 
-        ROS_INFO("publish Points and lines timestamp: %f, at %f", feature_lines->header.stamp.toSec(), ros::Time::now().toSec());
+        RCLCPP_INFO(rclcpp::get_logger("plvins"), "publish Points and lines timestamp: %f, at %f", plvins::seconds(feature_lines->header.stamp), rclcpp::Clock().now().seconds());
         //done publishing
-        ros::spinOnce();
+        rclcpp::spin_some(n);
         loop_rate.sleep();
     }
     return 0;

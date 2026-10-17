@@ -1,39 +1,21 @@
-cmake_minimum_required(VERSION 2.8.3)
-project(pub_imu_features)
-
-set(CMAKE_BUILD_TYPE "Release")
-set(CMAKE_CXX_FLAGS "-std=c++11")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -g")
-
-find_package(catkin REQUIRED COMPONENTS
-    roscpp
-    std_msgs
-    sensor_msgs
-    cv_bridge
-    )
-
-find_package(OpenCV REQUIRED)
-
-catkin_package()
-
-include_directories(
-    ${catkin_INCLUDE_DIRS}
-    )
-
-set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
-find_package(Eigen3  REQUIRED)
-include_directories(
-  ${catkin_INCLUDE_DIRS}
-  ${EIGEN3_INCLUDE_DIR}
-)
-
-add_executable(pub_imu src/pub_imu.cpp)
-target_link_libraries(pub_imu ${catkin_LIBRARIES})
-
-add_executable(pub_feature src/pub_feature.cpp)
-target_link_libraries(pub_feature ${catkin_LIBRARIES})
-
-add_executable(pub_stereo_feature src/pub_stereo_feature.cpp)
-target_link_libraries(pub_stereo_feature ${catkin_LIBRARIES})
-
-
+cmake_minimum_required(VERSION 3.22)
+project(pub_imu_features VERSION 0.1.0 LANGUAGES CXX)
+include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/Dependencies.cmake)
+find_package(ament_cmake REQUIRED)
+find_package(plvins_common REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
+foreach(target pub_imu pub_feature pub_stereo_feature pub_stereo_pl pub_imu_features)
+  add_executable(${target} src/${target}.cpp)
+  ament_target_dependencies(${target} plvins_common rclcpp sensor_msgs geometry_msgs std_msgs)
+  target_link_libraries(${target} Eigen3::Eigen)
+endforeach()
+install(TARGETS pub_imu pub_feature pub_stereo_feature pub_stereo_pl pub_imu_features DESTINATION lib/${PROJECT_NAME})
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(dataset_io_test test/dataset_io_test.cpp)
+  target_link_libraries(dataset_io_test Eigen3::Eigen)
+endif()
+ament_package()

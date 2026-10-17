@@ -1,109 +1,61 @@
-#include "ros/ros.h"
-#include "sensor_msgs/Imu.h"
-#include <eigen3/Eigen/Core>
-#include <eigen3/Eigen/Geometry>
+#include "dataset_io.h"
+#include <plvins_common/ros.hpp>
+
+#include <sensor_msgs/msg/imu.hpp>
+#include <Eigen/Core>
+#include <Eigen/Geometry>
 #include <fstream>
 #include <iostream>
 using namespace std;
 
 template <typename T>
-T readParam(ros::NodeHandle &n, std::string name)
+T readParam(const rclcpp::Node::SharedPtr &n, std::string name)
 {
-    T ans;
-    if (n.getParam(name, ans))
+    T ans{};
+    if (plvins::parameter(n, name, ans))
     {
-        ROS_INFO_STREAM("Loaded " << name << ": " << ans);
+        RCLCPP_INFO_STREAM(rclcpp::get_logger("plvins"), "Loaded " << name << ": " << ans);
     }
     else
     {
-        ROS_ERROR_STREAM("Failed to load " << name);
-        n.shutdown();
+        RCLCPP_ERROR_STREAM(rclcpp::get_logger("plvins"), "Failed to load " << name);
+        throw std::runtime_error("missing parameter: " + name);
     }
     return ans;
 }
 
 
-void LoadPose(std::string filename, std::vector<double>& timestamp,std::vector<Eigen::Vector3d>& gyros, std::vector<Eigen::Vector3d>& accs)
-{
-
-    std::ifstream f;
-    f.open(filename.c_str());
-
-    if(!f.is_open())
-    {
-        std::cerr << " can't open LoadFeatures file "<<std::endl;
-        return;
-    }
-
-    while (!f.eof()) {
-
-        std::string s;
-        std::getline(f,s);
-
-        if(! s.empty())
-        {
-            std::stringstream ss;
-            ss << s;
-
-            double time;
-            Eigen::Quaterniond q;
-            Eigen::Vector3d t;
-            Eigen::Vector3d gyro;
-            Eigen::Vector3d acc;
-
-            ss>>time;
-            ss>>q.w();
-            ss>>q.x();
-            ss>>q.y();
-            ss>>q.z();
-            ss>>t(0);
-            ss>>t(1);
-            ss>>t(2);
-            ss>>gyro(0);
-            ss>>gyro(1);
-            ss>>gyro(2);
-            ss>>acc(0);
-            ss>>acc(1);
-            ss>>acc(2);
-
-            timestamp.push_back(time);
-            gyros.push_back(gyro);
-            accs.push_back(acc);
-        }
-    }
-
-}
+using plvins::simulation::LoadPose;
+using plvins::simulation::LoadPointObs;
+using plvins::simulation::LoadLineObs;
 
 int main(int argc, char **argv)
 {
  
-    ros::init(argc, argv, "imu");
-    ros::NodeHandle n("~");
-    ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info);
+    rclcpp::init(argc, argv);
+    auto n = std::make_shared<rclcpp::Node>("imu");
     
-    ros::Publisher out_pub = n.advertise<sensor_msgs::Imu >("/imu0", 1000);
-    ros::Rate loop_rate(200);
+auto out_pub = n->create_publisher<sensor_msgs::msg::Imu >("/imu0", 1000);
+    rclcpp::Rate loop_rate(200);
     std::vector<double> timestamp;
     std::vector<Eigen::Vector3d> gyros;
     std::vector<Eigen::Vector3d> accs;
 
     std::string sim_file;
-    if (!n.getParam("sim_file_path", sim_file))
-    {
-        sim_file = std::string("/home/hyj/my_slam/vio_sim/vio_pl_sim/bin/");
-    }
-    ROS_INFO_STREAM("Loaded " << "sim_file_path" << ": " << sim_file);
+    plvins::parameter(n,"sim_file_path",sim_file);
+    if (sim_file.empty() || !std::filesystem::is_directory(sim_file)) throw std::runtime_error("sim_file_path must name an external simulation directory");
+    sim_file=std::filesystem::absolute(sim_file).string()+"/";
 
     LoadPose(sim_file + "imu_pose.txt",timestamp, gyros, accs);
 
     sleep(1);
-    //while (ros::ok())
-    for (int i = 0; i < timestamp.size(); ++i)
+    //while (rclcpp::ok())
+    for (int i = 0; rclcpp::ok() && i < timestamp.size(); ++i)
     {
         //new imu message
-        sensor_msgs::Imu imu_msg = sensor_msgs::Imu();
+        sensor_msgs::msg::Imu imu_msg = sensor_msgs::msg::Imu();
 
-        ros::Time t(timestamp[i]);
+        auto t = plvins::stamp(timestamp[i]);
         imu_msg.header.stamp = t;
         imu_msg.header.frame_id = "imu0";
 
@@ -123,11 +75,11 @@ int main(int argc, char **argv)
         imu_msg.linear_acceleration.z = acc[2];
         //imu_msg.angular_velocity_covariance = {0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0};
         //publish the new imu message
-        out_pub.publish(imu_msg);
-        ROS_INFO("%s", "send an imu message");
+        out_pub->publish(imu_msg);
+        RCLCPP_INFO(rclcpp::get_logger("plvins"), "%s", "send an imu message");
 
         //done publishing
-        ros::spinOnce();
+        rclcpp::spin_some(n);
         loop_rate.sleep();
     }
     return 0;
