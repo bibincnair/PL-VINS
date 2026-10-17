@@ -232,6 +232,15 @@ def main():
     if not args.no_evaluate and any(not shutil.which(name) for name in ('evo_ape', 'evo_rpe')):
         parser.error('EVO CLI not found; install requirements-evo.lock first or pass --no-evaluate')
 
+    # OpenCV is installed privately by the PL-VINS dependency bootstrap. The
+    # executables have RUNPATHs for direct dependencies, but transitive OpenCV
+    # dependencies also need this directory in LD_LIBRARY_PATH.
+    env = os.environ.copy()
+    vendor_lib = Path(__file__).resolve().parents[1] / '.deps' / 'install' / 'lib'
+    if vendor_lib.is_dir():
+        prior = env.get('LD_LIBRARY_PATH', '')
+        env['LD_LIBRARY_PATH'] = str(vendor_lib) + (os.pathsep + prior if prior else '')
+
     out_dir = args.output_root / args.sequence
     try:
         out_dir.mkdir(parents=True, exist_ok=False)
@@ -246,13 +255,13 @@ def main():
                   'use_sim_time:=true', f'loop_closure:={str(args.loop_closure).lower()}']
         with (out_dir / 'launch.log').open('w') as launch_log:
             process = subprocess.Popen(launch, stdout=launch_log, stderr=subprocess.STDOUT,
-                                       start_new_session=True)
+                                       start_new_session=True, env=env)
             try:
                 wait_for_nodes(process, out_dir / 'launch.log', args.startup_timeout)
                 with (out_dir / 'bag.log').open('w') as bag_log:
                     playback = subprocess.run(['ros2', 'bag', 'play', str(bag_dir), '--clock',
                                                '--rate', str(args.playback_rate)],
-                                              stdout=bag_log, stderr=subprocess.STDOUT)
+                                              stdout=bag_log, stderr=subprocess.STDOUT, env=env)
                 if playback.returncode:
                     raise RuntimeError(f'ros2 bag play failed; see {out_dir / "bag.log"}')
                 time.sleep(2)
