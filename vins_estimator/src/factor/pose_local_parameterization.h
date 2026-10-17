@@ -1,13 +1,24 @@
 #pragma once
-
-#include <eigen3/Eigen/Dense>
 #include <ceres/ceres.h>
-#include "../utility/utility.h"
+#include <Eigen/Dense>
+#include <Eigen/Geometry>
 
-class PoseLocalParameterization : public ceres::LocalParameterization
-{
-    virtual bool Plus(const double *x, const double *delta, double *x_plus_delta) const;
-    virtual bool ComputeJacobian(const double *x, double *jacobian) const;
-    virtual int GlobalSize() const { return 7; };
-    virtual int LocalSize() const { return 6; };
+// Pose storage is [p, qx, qy, qz, qw], with right rotation increments.
+class PoseLocalParameterization final : public ceres::Manifold {
+ public:
+  int AmbientSize() const override { return 7; }
+  int TangentSize() const override { return 6; }
+  bool Plus(const double*, const double*, double*) const override;
+  bool PlusJacobian(const double*, double*) const override;
+  bool Minus(const double*, const double*, double*) const override;
+  bool MinusJacobian(const double*, double*) const override;
 };
+
+// Existing factor algebra produces tangent derivatives. Ceres requires ambient ones.
+inline void liftPoseJacobian(const double* x, double* data, int rows) {
+  Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 7, Eigen::RowMajor>> J(data, rows, 7);
+  Eigen::Matrix<double, 6, 7, Eigen::RowMajor> inverse;
+  PoseLocalParameterization().MinusJacobian(x, inverse.data());
+  const Eigen::MatrixXd local = J.leftCols(6);
+  J = local * inverse;
+}

@@ -1,8 +1,9 @@
+#include <plvins_common/ros.hpp>
 #pragma once
 
-#include <ros/ros.h>
+
 #include <vector>
-#include <eigen3/Eigen/Dense>
+#include <Eigen/Dense>
 #include "utility/utility.h"
 #include <opencv2/opencv.hpp>
 #include <opencv2/core/eigen.hpp>
@@ -48,7 +49,7 @@ extern std::string CAM_NAMES;
 extern std::string IMAGE_TOPIC;
 extern std::string IMU_TOPIC;
 
-void readParameters(ros::NodeHandle &n);
+void readParameters(const rclcpp::Node::SharedPtr &n);
 
 enum SIZE_PARAMETERIZATION
 {

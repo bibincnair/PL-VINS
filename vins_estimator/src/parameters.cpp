@@ -1,3 +1,4 @@
+#include <plvins_common/ros.hpp>
 #include "parameters.h"
 
 double BASE_LINE;
@@ -31,32 +32,32 @@ std::string VINS_FOLDER_PATH;
 int MAX_KEYFRAME_NUM;
 
 template <typename T>
-T readParam(ros::NodeHandle &n, std::string name)
+T readParam(const rclcpp::Node::SharedPtr &n, std::string name)
 {
-    T ans;
-    if (n.getParam(name, ans))
+    T ans{};
+    if (plvins::parameter(n, name, ans))
     {
-        ROS_INFO_STREAM("Loaded " << name << ": " << ans);
+        RCLCPP_INFO_STREAM(rclcpp::get_logger("plvins"), "Loaded " << name << ": " << ans);
     }
     else
     {
-        ROS_ERROR_STREAM("Failed to load " << name);
-        n.shutdown();
+        RCLCPP_ERROR_STREAM(rclcpp::get_logger("plvins"), "Failed to load " << name);
+        throw std::runtime_error("missing parameter: " + name);
     }
     return ans;
 }
 
-void readParameters(ros::NodeHandle &n)
+void readParameters(const rclcpp::Node::SharedPtr &n)
 {
     std::string config_file;
     config_file = readParam<std::string>(n, "config_file");
     cv::FileStorage fsSettings(config_file, cv::FileStorage::READ);
     if(!fsSettings.isOpened())
     {
-        std::cerr << "ERROR: Wrong path to settings" << std::endl;
+        throw std::runtime_error("Cannot open config_file: " + config_file);
     }
 
-    VINS_FOLDER_PATH = readParam<std::string>(n, "vins_folder");
+    VINS_FOLDER_PATH = plvins::output_directory(n);
     fsSettings["image_topic"] >> IMAGE_TOPIC;
     fsSettings["imu_topic"] >> IMU_TOPIC;
 
@@ -68,12 +69,10 @@ void readParameters(ros::NodeHandle &n)
     MIN_PARALLAX = fsSettings["keyframe_parallax"];
     MIN_PARALLAX = MIN_PARALLAX / FOCAL_LENGTH;
 
-    fsSettings["output_path"] >> VINS_RESULT_PATH;
-    VINS_RESULT_PATH = VINS_FOLDER_PATH + VINS_RESULT_PATH;
-    std::ofstream foutC("/home/healer/EuRoC/PL-VINS/outout/tum_plvins.txt", std::ios::out);
-    foutC.close();
-    std::ofstream foutC1("/home/healer/EuRoC/PL-VINS/outout/evo_plvins.txt", std::ios::out);
-    foutC1.close();
+    VINS_RESULT_PATH = VINS_FOLDER_PATH;
+    EX_CALIB_RESULT_PATH = VINS_FOLDER_PATH + "/extrinsic_calibration.yaml";
+    std::ofstream(VINS_RESULT_PATH + "/trajectory_ns.txt", std::ios::trunc);
+    std::ofstream(VINS_RESULT_PATH + "/trajectory_tum.txt", std::ios::trunc);
 
     ACC_N = fsSettings["acc_n"];
     ACC_W = fsSettings["acc_w"];
@@ -84,23 +83,19 @@ void readParameters(ros::NodeHandle &n)
     ESTIMATE_EXTRINSIC = fsSettings["estimate_extrinsic"];
     if (ESTIMATE_EXTRINSIC == 2)
     {
-        ROS_WARN("have no prior about extrinsic param, calibrate extrinsic param");
+        RCLCPP_WARN(rclcpp::get_logger("plvins"), "have no prior about extrinsic param, calibrate extrinsic param");
         RIC.push_back(Eigen::Matrix3d::Identity());
         TIC.push_back(Eigen::Vector3d::Zero());
-        fsSettings["ex_calib_result_path"] >> EX_CALIB_RESULT_PATH;
-        EX_CALIB_RESULT_PATH = VINS_FOLDER_PATH + EX_CALIB_RESULT_PATH;
 
     }
     else 
     {
         if ( ESTIMATE_EXTRINSIC == 1)
         {
-            ROS_WARN(" Optimize extrinsic param around initial guess!");
-            fsSettings["ex_calib_result_path"] >> EX_CALIB_RESULT_PATH;
-            EX_CALIB_RESULT_PATH = VINS_FOLDER_PATH + EX_CALIB_RESULT_PATH;
+            RCLCPP_WARN(rclcpp::get_logger("plvins"), " Optimize extrinsic param around initial guess!");
         }
         if (ESTIMATE_EXTRINSIC == 0)
-            ROS_WARN(" fix extrinsic param ");
+            RCLCPP_WARN(rclcpp::get_logger("plvins"), " fix extrinsic param ");
 
         cv::Mat cv_R, cv_T;
         fsSettings["extrinsicRotation"] >> cv_R;
@@ -113,21 +108,13 @@ void readParameters(ros::NodeHandle &n)
         eigen_R = Q.normalized();
         RIC.push_back(eigen_R);
         TIC.push_back(eigen_T);
-        ROS_INFO_STREAM("Extrinsic_R : " << std::endl << RIC[0]);
-        ROS_INFO_STREAM("Extrinsic_T : " << std::endl << TIC[0].transpose());
+        RCLCPP_INFO_STREAM(rclcpp::get_logger("plvins"), "Extrinsic_R : " << std::endl << RIC[0]);
+        RCLCPP_INFO_STREAM(rclcpp::get_logger("plvins"), "Extrinsic_T : " << std::endl << TIC[0].transpose());
         
     } 
 
     LOOP_CLOSURE = fsSettings["loop_closure"];
-    if (LOOP_CLOSURE == 1)
-    {
-        fsSettings["voc_file"] >> VOC_FILE;;
-        fsSettings["pattern_file"] >> PATTERN_FILE;
-        VOC_FILE = VINS_FOLDER_PATH + VOC_FILE;
-        PATTERN_FILE = VINS_FOLDER_PATH + PATTERN_FILE;
-        MIN_LOOP_NUM = fsSettings["min_loop_num"];
-        CAM_NAMES = config_file;
-    }
+    CAM_NAMES = config_file;
 
     INIT_DEPTH = 5.0;
     BIAS_ACC_THRESHOLD = 0.1;

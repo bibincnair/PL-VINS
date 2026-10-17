@@ -4,7 +4,7 @@
 
 #ifndef VINS_ESTIMATOR_LINE_GEOMETRY_H
 #define VINS_ESTIMATOR_LINE_GEOMETRY_H
-#include <eigen3/Eigen/Dense>
+#include <Eigen/Dense>
 using namespace Eigen;
 typedef Matrix<double,6,1> Vector6d;
 typedef Matrix<double,8,1> Vector8d;

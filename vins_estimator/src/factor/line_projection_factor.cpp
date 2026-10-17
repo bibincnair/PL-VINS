@@ -1,3 +1,5 @@
+#include "line_parameterization.h"
+#include "pose_local_parameterization.h"
 #include "line_projection_factor.h"
 #include "../utility/line_geometry.h"
 #include "line_parameterization.h"
@@ -37,6 +39,7 @@ bool lineProjectionFactor::Evaluate(double const *const *parameters, double *res
     // 直线的投影矩阵K为单位阵
     Eigen::Vector3d nc = line_c.head(3);
     double l_norm = nc(0) * nc(0) + nc(1) * nc(1);
+    if (!std::isfinite(l_norm) || l_norm<1e-16) return false;
     double l_sqrtnorm = sqrt( l_norm );
     double l_trinorm = l_norm * l_sqrtnorm;
 
@@ -169,7 +172,7 @@ bool lineProjectionFactor::Evaluate(double const *const *parameters, double *res
         Eigen::Quaterniond qic(parameters[1][6], parameters[1][3], parameters[1][4], parameters[1][5]);
 
         Eigen::Vector4d line_orth( parameters[2][0],parameters[2][1],parameters[2][2],parameters[2][3]);
-        ceres::LocalParameterization *local_parameterization_line = new LineOrthParameterization();
+        ceres::Manifold *local_parameterization_line = new LineOrthParameterization();
 
         int a = k / 3, b = k % 3;
         Eigen::Vector3d delta = Eigen::Vector3d(b == 0, b == 1, b == 2) * eps;
@@ -211,7 +214,8 @@ bool lineProjectionFactor::Evaluate(double const *const *parameters, double *res
         // 直线的投影矩阵K为单位阵
         Eigen::Vector3d nc = line_c.head(3);
         double l_norm = nc(0) * nc(0) + nc(1) * nc(1);
-        double l_sqrtnorm = sqrt( l_norm );
+        if (!std::isfinite(l_norm) || l_norm<1e-16) return false;
+    double l_sqrtnorm = sqrt( l_norm );
         double l_trinorm = l_norm * l_sqrtnorm;
 
         double e1 = obs_i(0) * nc(0) + obs_i(1) * nc(1) + nc(2);
@@ -227,6 +231,11 @@ bool lineProjectionFactor::Evaluate(double const *const *parameters, double *res
     std::cout <<"num_jacobian:\n"<< num_jacobian <<"\n"<< std::endl;
 */
 
+    if (jacobians) {
+      if (jacobians[0]) liftPoseJacobian(parameters[0], jacobians[0], 2);
+      if (jacobians[1]) liftPoseJacobian(parameters[1], jacobians[1], 2);
+      if (jacobians[2]) liftLineJacobian(parameters[2], jacobians[2], 2);
+    }
     return true;
 }
 
@@ -274,6 +283,7 @@ bool lineProjectionFactor_incamera::Evaluate(double const *const *parameters, do
     // 直线的投影矩阵K为单位阵
     Eigen::Vector3d nc = line_cj.head(3);
     double l_norm = nc(0) * nc(0) + nc(1) * nc(1);
+    if (!std::isfinite(l_norm) || l_norm<1e-16) return false;
     double l_sqrtnorm = sqrt( l_norm );
     double l_trinorm = l_norm * l_sqrtnorm;
 
@@ -364,7 +374,7 @@ bool lineProjectionFactor_incamera::Evaluate(double const *const *parameters, do
 
             Eigen::Matrix3d Rbjbi = Rwbj.transpose() * Rwbi;
             Eigen::Matrix3d Rcjci = Rbc.transpose() * Rbjbi * Rbc;
-            Vector3d tcjci = Rbc * ( Rwbj.transpose() * (Rwbi * tbc + twbi - twbj) - tbc);
+            Vector3d tcjci = Rbc.transpose() * ( Rwbj.transpose() * (Rwbi * tbc + twbi - twbj) - tbc);
 
             Vector3d nci = line_ci.head(3);
             Vector3d dci = line_ci.tail(3);
@@ -385,7 +395,7 @@ bool lineProjectionFactor_incamera::Evaluate(double const *const *parameters, do
 
             Eigen::Matrix3d Rbjbi = Rwbj.transpose() * Rwbi;
             Eigen::Matrix3d Rcjci = Rbc.transpose() * Rbjbi * Rbc;
-            Vector3d tcjci = Rbc * ( Rwbj.transpose() * (Rwbi * tbc + twbi - twbj) - tbc);
+            Vector3d tcjci = Rbc.transpose() * ( Rwbj.transpose() * (Rwbi * tbc + twbi - twbj) - tbc);
 
             Matrix6d Tcjci;
             Tcjci << Rcjci, skew_symmetric(tcjci) * Rcjci,
@@ -441,7 +451,7 @@ bool lineProjectionFactor_incamera::Evaluate(double const *const *parameters, do
         Eigen::Quaterniond qic(parameters[2][6], parameters[2][3], parameters[2][4], parameters[2][5]);
 
         Eigen::Vector4d line_orth( parameters[3][0],parameters[3][1],parameters[3][2],parameters[3][3]);
-        ceres::LocalParameterization *local_parameterization_line = new LineOrthParameterization();
+        ceres::Manifold *local_parameterization_line = new LineOrthParameterization();
 
         int a = k / 3, b = k % 3;
         Eigen::Vector3d delta = Eigen::Vector3d(b == 0, b == 1, b == 2) * eps;
@@ -493,7 +503,8 @@ bool lineProjectionFactor_incamera::Evaluate(double const *const *parameters, do
         Eigen::Vector3d nc = line_cj.head(3);
 
         double l_norm = nc(0) * nc(0) + nc(1) * nc(1);
-        double l_sqrtnorm = sqrt( l_norm );
+        if (!std::isfinite(l_norm) || l_norm<1e-16) return false;
+    double l_sqrtnorm = sqrt( l_norm );
 
         double e1 = obs_i(0) * nc(0) + obs_i(1) * nc(1) + nc(2);
         double e2 = obs_i(2) * nc(0) + obs_i(3) * nc(1) + nc(2);
@@ -508,6 +519,12 @@ bool lineProjectionFactor_incamera::Evaluate(double const *const *parameters, do
     std::cout <<"num_jacobian:\n"<< num_jacobian <<"\n"<< std::endl;
 */
 
+    if (jacobians) {
+      if (jacobians[0]) liftPoseJacobian(parameters[0], jacobians[0], 2);
+      if (jacobians[1]) liftPoseJacobian(parameters[1], jacobians[1], 2);
+      if (jacobians[2]) liftPoseJacobian(parameters[2], jacobians[2], 2);
+      if (jacobians[3]) liftLineJacobian(parameters[3], jacobians[3], 2);
+    }
     return true;
 }
 
@@ -532,6 +549,7 @@ bool lineProjectionFactor_instartframe::Evaluate(double const *const *parameters
     // 直线的投影矩阵K为单位阵
     Eigen::Vector3d nc = line_ci.head(3);
     double l_norm = nc(0) * nc(0) + nc(1) * nc(1);
+    if (!std::isfinite(l_norm) || l_norm<1e-16) return false;
     double l_sqrtnorm = sqrt( l_norm );
     double l_trinorm = l_norm * l_sqrtnorm;
 
@@ -587,5 +605,8 @@ bool lineProjectionFactor_instartframe::Evaluate(double const *const *parameters
 
     }
 
+    if (jacobians) {
+      if (jacobians[0]) liftLineJacobian(parameters[0], jacobians[0], 2);
+    }
     return true;
 }

@@ -1,3 +1,6 @@
+#include "pose_local_parameterization.h"
+#include "line_parameterization.h"
+#include <plvins_common/ros.hpp>
 #include "marginalization_factor.h"
 
 void ResidualBlockInfo::Evaluate()
@@ -15,6 +18,20 @@ void ResidualBlockInfo::Evaluate()
         //dim += block_sizes[i] == 7 ? 6 : block_sizes[i];
     }
     cost_function->Evaluate(parameter_blocks.data(), residuals.data(), raw_jacobians);
+    // Marginalization assembles its normal equations in tangent coordinates.
+    for (size_t i = 0; i < block_sizes.size(); ++i) {
+        if (block_sizes[i] == 7) {
+            Eigen::Matrix<double,7,6,Eigen::RowMajor> plus;
+            PoseLocalParameterization().PlusJacobian(parameter_blocks[i], plus.data());
+            Eigen::MatrixXd local = jacobians[i] * plus;
+            jacobians[i].setZero(); jacobians[i].leftCols(6) = local;
+        } else if (block_sizes[i] == 4) {
+            Eigen::Matrix<double,4,4,Eigen::RowMajor> plus;
+            LineOrthParameterization().PlusJacobian(parameter_blocks[i], plus.data());
+            jacobians[i] = (jacobians[i] * plus).eval();
+        }
+    }
+
 
     //std::vector<int> tmp_idx(block_sizes.size());
     //Eigen::MatrixXd tmp(dim, dim);
@@ -32,7 +49,7 @@ void ResidualBlockInfo::Evaluate()
     //}
     //Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> saes(tmp);
     //std::cout << saes.eigenvalues() << std::endl;
-    //ROS_ASSERT(saes.eigenvalues().minCoeff() >= -1e-6);
+    //PLVINS_ASSERT(saes.eigenvalues().minCoeff() >= -1e-6);
 
     if (loss_function)
     {
@@ -70,10 +87,10 @@ void ResidualBlockInfo::Evaluate()
 
 MarginalizationInfo::~MarginalizationInfo()
 {
-    //ROS_WARN("release marginlizationinfo");
+    //RCLCPP_WARN(rclcpp::get_logger("plvins"), "release marginlizationinfo");
     
     for (auto it = parameter_block_data.begin(); it != parameter_block_data.end(); ++it)
-        delete it->second;
+        delete[] it->second;
 
     for (int i = 0; i < (int)factors.size(); i++)
     {
@@ -206,7 +223,7 @@ void MarginalizationInfo::marginalize()
 
     n = pos - m;   // n 非marg参数的维数, 这个主要是其他关键帧,以及外参数的维度
 
-    ROS_INFO("marginalization, pos: %d, m: %d, n: %d, size: %d", pos, m, n, (int)parameter_block_idx.size());
+    RCLCPP_INFO(rclcpp::get_logger("plvins"), "marginalization, pos: %d, m: %d, n: %d, size: %d", pos, m, n, (int)parameter_block_idx.size());
 
     TicToc t_summing;
     Eigen::MatrixXd A(pos, pos);   // Hessien矩阵的维度
@@ -242,7 +259,7 @@ void MarginalizationInfo::marginalize()
             b.segment(idx_i, size_i) += jacobian_i.transpose() * it->residuals;
         }
     }
-    ROS_INFO("summing up costs %f ms", t_summing.toc());
+    RCLCPP_INFO(rclcpp::get_logger("plvins"), "summing up costs %f ms", t_summing.toc());
     */
     //multi thread
     TicToc t_thread_summing;
@@ -265,8 +282,8 @@ void MarginalizationInfo::marginalize()
         int ret = pthread_create( &tids[i], NULL, ThreadsConstructA ,(void*)&(threadsstruct[i]));
         if (ret != 0)
         {
-            ROS_WARN("pthread_create error");
-            ROS_BREAK();
+            RCLCPP_WARN(rclcpp::get_logger("plvins"), "pthread_create error");
+            throw std::runtime_error("invalid runtime state");
         }
     }
     for( int i = NUM_THREADS - 1; i >= 0; i--)  
@@ -275,8 +292,8 @@ void MarginalizationInfo::marginalize()
         A += threadsstruct[i].A;
         b += threadsstruct[i].b;
     }
-    //ROS_DEBUG("thread summing up costs %f ms", t_thread_summing.toc());
-    //ROS_INFO("A diff %f , b diff %f ", (A - tmp_A).sum(), (b - tmp_b).sum());
+    //RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "thread summing up costs %f ms", t_thread_summing.toc());
+    //RCLCPP_INFO(rclcpp::get_logger("plvins"), "A diff %f , b diff %f ", (A - tmp_A).sum(), (b - tmp_b).sum());
 
     ///////////////// marg accletor code/////////////////////////
     // marg landmark firstly
@@ -314,7 +331,7 @@ void MarginalizationInfo::marginalize()
         // TicToc t_inv;
         // Eigen::MatrixXd Amm_inv1 = Amm1.diagonal().asDiagonal().inverse();    // when only use point feature
         Eigen::MatrixXd Amm_inv1 = Amm1.inverse();
-        // ROS_INFO("invese Amm costs %f ms", tmarg_l.toc());
+        // RCLCPP_INFO(rclcpp::get_logger("plvins"), "invese Amm costs %f ms", tmarg_l.toc());
         
         Eigen::MatrixXd Amr1 = A_reorder.block(0, m1, m1, n1);
         Eigen::MatrixXd Arm1 = A_reorder.block(m1, 0, n1, m1);
@@ -343,7 +360,7 @@ void MarginalizationInfo::marginalize()
     Eigen::MatrixXd tempB = Arm * Amm_inv;
     A = Arr - tempB * Amr;
     b = brr - tempB * bmm;
-    // ROS_INFO("marg pose costs %f ms", tmarg_pose.toc());
+    // RCLCPP_INFO(rclcpp::get_logger("plvins"), "marg pose costs %f ms", tmarg_pose.toc());
     /////////////////////////////////////////////////////////////
 
     Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> saes2(A);
@@ -385,7 +402,7 @@ void MarginalizationInfo::marginalize()
 
 //    n = pos - m;   // n 非marg参数的维数, 这个主要是其他关键帧,以及外参数的维度
 
-//    ROS_INFO("marginalization, pos: %d, m: %d, n: %d, size: %d", pos, m, n, (int)parameter_block_idx.size());
+//    RCLCPP_INFO(rclcpp::get_logger("plvins"), "marginalization, pos: %d, m: %d, n: %d, size: %d", pos, m, n, (int)parameter_block_idx.size());
 
 //    TicToc t_summing;
 //    Eigen::MatrixXd A(pos, pos);   // Hessien矩阵的维度
@@ -414,8 +431,8 @@ void MarginalizationInfo::marginalize()
 //        int ret = pthread_create( &tids[i], NULL, ThreadsConstructA ,(void*)&(threadsstruct[i]));
 //        if (ret != 0)
 //        {
-//            ROS_WARN("pthread_create error");
-//            ROS_BREAK();
+//            RCLCPP_WARN(rclcpp::get_logger("plvins"), "pthread_create error");
+//            throw std::runtime_error("invalid runtime state");
 //        }
 //    }
 //    for( int i = NUM_THREADS - 1; i >= 0; i--)
@@ -429,7 +446,7 @@ void MarginalizationInfo::marginalize()
 //    Eigen::MatrixXd Amm = 0.5 * (A.block(0, 0, m, m) + A.block(0, 0, m, m).transpose());
 //    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> saes(Amm);
 
-//    //ROS_ASSERT_MSG(saes.eigenvalues().minCoeff() >= -1e-4, "min eigenvalue %f", saes.eigenvalues().minCoeff());
+//    //PLVINS_ASSERT_MSG(saes.eigenvalues().minCoeff() >= -1e-4, "min eigenvalue %f", saes.eigenvalues().minCoeff());
 //    //std::cout<<"svd:   "<<saes.eigenvalues().maxCoeff() << std::endl;
 //    Eigen::MatrixXd Amm_inv = saes.eigenvectors() * Eigen::VectorXd((saes.eigenvalues().array() > eps).select(saes.eigenvalues().array().inverse(), 0)).asDiagonal() * saes.eigenvectors().transpose();
 //    //printf("error1: %f\n", (Amm * Amm_inv - Eigen::MatrixXd::Identity(m, m)).sum());
@@ -513,11 +530,9 @@ bool MarginalizationFactor::Evaluate(double const *const *parameters, double *re
         else
         {
             dx.segment<3>(idx + 0) = x.head<3>() - x0.head<3>();
-            dx.segment<3>(idx + 3) = 2.0 * Utility::positify(Eigen::Quaterniond(x0(6), x0(3), x0(4), x0(5)).inverse() * Eigen::Quaterniond(x(6), x(3), x(4), x(5))).vec();
-            if (!((Eigen::Quaterniond(x0(6), x0(3), x0(4), x0(5)).inverse() * Eigen::Quaterniond(x(6), x(3), x(4), x(5))).w() >= 0))
-            {
-                dx.segment<3>(idx + 3) = 2.0 * -Utility::positify(Eigen::Quaterniond(x0(6), x0(3), x0(4), x0(5)).inverse() * Eigen::Quaterniond(x(6), x(3), x(4), x(5))).vec();
-            }
+            Eigen::Quaterniond dq = Eigen::Quaterniond(x0(6),x0(3),x0(4),x0(5)).conjugate() *
+                                    Eigen::Quaterniond(x(6),x(3),x(4),x(5));
+            dx.segment<3>(idx + 3) = (dq.w()<0 ? -2. : 2.) * dq.vec();
         }
     }
 
@@ -535,6 +550,18 @@ bool MarginalizationFactor::Evaluate(double const *const *parameters, double *re
                 Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> jacobian(jacobians[i], n, size);
                 jacobian.setZero();
                 jacobian.leftCols(local_size) = marginalization_info->linearized_jacobians.middleCols(idx, local_size);
+                if (size == 7) {
+                    const auto* x0 = marginalization_info->keep_block_data[i];
+                    Eigen::Quaterniond q0(x0[6],x0[3],x0[4],x0[5]);
+                    Eigen::Quaterniond q(parameters[i][6],parameters[i][3],parameters[i][4],parameters[i][5]);
+                    Eigen::Quaterniond dq = q0.conjugate() * q;
+                    const double sign = dq.w()<0 ? -1. : 1.;
+                    Eigen::Matrix3d skew = Utility::skewSymmetric(dq.vec());
+                    jacobian.middleCols(3,3) = (jacobian.middleCols(3,3) *
+                        (sign * (dq.w() * Eigen::Matrix3d::Identity() + skew))).eval();
+                    liftPoseJacobian(parameters[i], jacobians[i], n);
+                }
+
             }
         }
     }

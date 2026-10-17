@@ -1,3 +1,4 @@
+#include <plvins_common/ros.hpp>
 #include "feature_manager.h"
 
 Vector2d image_uv1;
@@ -50,8 +51,8 @@ int FeatureManager::getFeatureCount()
 //                                                                      featureId      cameraId, point
 bool FeatureManager::addFeatureCheckParallax(int frame_count, const map<int, vector<pair<int, Vector3d>>> &image)
 {
-    ROS_DEBUG("input feature: %d", (int)image.size());
-    ROS_DEBUG("num of feature: %d", getFeatureCount());  // 已有的特征数目
+    RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "input feature: %d", (int)image.size());
+    RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "num of feature: %d", getFeatureCount());  // 已有的特征数目
     double parallax_sum = 0;
     int parallax_num = 0;
     last_track_num = 0;
@@ -96,8 +97,8 @@ bool FeatureManager::addFeatureCheckParallax(int frame_count, const map<int, vec
     }
     else
     {
-        ROS_DEBUG("parallax_sum: %lf, parallax_num: %d", parallax_sum, parallax_num);
-        ROS_DEBUG("current parallax: %lf", parallax_sum / parallax_num * FOCAL_LENGTH);
+        RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "parallax_sum: %lf, parallax_num: %d", parallax_sum, parallax_num);
+        RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "current parallax: %lf", parallax_sum / parallax_num * FOCAL_LENGTH);
         return parallax_sum / parallax_num >= MIN_PARALLAX;
     }
 }
@@ -105,9 +106,9 @@ bool FeatureManager::addFeatureCheckParallax(int frame_count, const map<int, vec
 // bool FeatureManager::addFeatureCheckParallax(int frame_count, const map<int, vector<pair<int, Matrix<double, 5, 1>>>> &image, const map<int, vector<pair<int, Vector4d>>> &lines)
 bool FeatureManager::addFeatureCheckParallax(int frame_count, const map<int, vector<pair<int, Eigen::Matrix<double, 5, 1>>>> &image, const map<int, vector<pair<int, Vector4d>>> &lines)
 {
-    ROS_DEBUG("input point feature: %d", (int)image.size());
-    ROS_DEBUG("input line feature: %d", (int)lines.size());
-    ROS_DEBUG("num of feature: %d", getFeatureCount());  // 已有的特征数目
+    RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "input point feature: %d", (int)image.size());
+    RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "input line feature: %d", (int)lines.size());
+    RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "num of feature: %d", getFeatureCount());  // 已有的特征数目
     double parallax_sum = 0;
     int parallax_num = 0;
     last_track_num = 0;
@@ -176,16 +177,16 @@ bool FeatureManager::addFeatureCheckParallax(int frame_count, const map<int, vec
     }
     else
     {
-        ROS_DEBUG("parallax_sum: %lf, parallax_num: %d", parallax_sum, parallax_num);
-        ROS_DEBUG("current parallax: %lf", parallax_sum / parallax_num * FOCAL_LENGTH);
+        RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "parallax_sum: %lf, parallax_num: %d", parallax_sum, parallax_num);
+        RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "current parallax: %lf", parallax_sum / parallax_num * FOCAL_LENGTH);
         return parallax_sum / parallax_num >= MIN_PARALLAX;
     }
 }
 bool FeatureManager::addFeatureCheckParallax(int frame_count, const map<int, vector<pair<int, Vector3d>>> &image, const map<int, vector<pair<int, Vector4d>>> &lines)
 {
-    ROS_DEBUG("input point feature: %d", (int)image.size());
-    ROS_DEBUG("input line feature: %d", (int)lines.size());
-    ROS_DEBUG("num of feature: %d", getFeatureCount());  // 已有的特征数目
+    RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "input point feature: %d", (int)image.size());
+    RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "input line feature: %d", (int)lines.size());
+    RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "num of feature: %d", getFeatureCount());  // 已有的特征数目
     double parallax_sum = 0;
     int parallax_num = 0;
     last_track_num = 0;
@@ -254,17 +255,17 @@ bool FeatureManager::addFeatureCheckParallax(int frame_count, const map<int, vec
     }
     else
     {
-        ROS_DEBUG("parallax_sum: %lf, parallax_num: %d", parallax_sum, parallax_num);
-        ROS_DEBUG("current parallax: %lf", parallax_sum / parallax_num * FOCAL_LENGTH);
+        RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "parallax_sum: %lf, parallax_num: %d", parallax_sum, parallax_num);
+        RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "current parallax: %lf", parallax_sum / parallax_num * FOCAL_LENGTH);
         return parallax_sum / parallax_num >= MIN_PARALLAX;
     }
 }
 
 bool FeatureManager::addFeatureCheckParallax(int frame_count, const map<int, vector<pair<int, Vector3d>>> &image, const map<int, vector<pair<int, Vector8d>>> &lines)
 {
-    ROS_DEBUG("input point feature: %d", (int)image.size());
-    ROS_DEBUG("input line feature: %d", (int)lines.size());
-    ROS_DEBUG("num of feature: %d", getFeatureCount());  // 已有的特征数目
+    RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "input point feature: %d", (int)image.size());
+    RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "input line feature: %d", (int)lines.size());
+    RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "num of feature: %d", getFeatureCount());  // 已有的特征数目
     double parallax_sum = 0;
     int parallax_num = 0;
     last_track_num = 0;
@@ -333,30 +334,30 @@ bool FeatureManager::addFeatureCheckParallax(int frame_count, const map<int, vec
     }
     else
     {
-        ROS_DEBUG("parallax_sum: %lf, parallax_num: %d", parallax_sum, parallax_num);
-        ROS_DEBUG("current parallax: %lf", parallax_sum / parallax_num * FOCAL_LENGTH);
+        RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "parallax_sum: %lf, parallax_num: %d", parallax_sum, parallax_num);
+        RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "current parallax: %lf", parallax_sum / parallax_num * FOCAL_LENGTH);
         return parallax_sum / parallax_num >= MIN_PARALLAX;
     }
 }
 
 void FeatureManager::debugShow()
 {
-    ROS_DEBUG("debug show");
+    RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "debug show");
     for (auto &it : feature)
     {
-        ROS_ASSERT(it.feature_per_frame.size() != 0);
-        ROS_ASSERT(it.start_frame >= 0);
-        ROS_ASSERT(it.used_num >= 0);
+        PLVINS_ASSERT(it.feature_per_frame.size() != 0);
+        PLVINS_ASSERT(it.start_frame >= 0);
+        PLVINS_ASSERT(it.used_num >= 0);
 
-        ROS_DEBUG("%d,%d,%d ", it.feature_id, it.used_num, it.start_frame);
+        RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "%d,%d,%d ", it.feature_id, it.used_num, it.start_frame);
         int sum = 0;
         for (auto &j : it.feature_per_frame)
         {
-            ROS_DEBUG("%d,", int(j.is_used));
+            RCLCPP_DEBUG(rclcpp::get_logger("plvins"), "%d,", int(j.is_used));
             sum += j.is_used;
             printf("(%lf,%lf) ",j.point(0), j.point(1));
         }
-        ROS_ASSERT(it.used_num == sum);
+        PLVINS_ASSERT(it.used_num == sum);
     }
 }
 
@@ -390,7 +391,7 @@ void FeatureManager::setDepth(const VectorXd &x)
             continue;
 
         it_per_id.estimated_depth = 1.0 / x(++feature_index);
-        //ROS_INFO("feature id %d , start_frame %d, depth %f ", it_per_id->feature_id, it_per_id-> start_frame, it_per_id->estimated_depth);
+        //RCLCPP_INFO(rclcpp::get_logger("plvins"), "feature id %d , start_frame %d, depth %f ", it_per_id->feature_id, it_per_id-> start_frame, it_per_id->estimated_depth);
         if (it_per_id.estimated_depth < 0)
         {
             it_per_id.solve_flag = 2;
@@ -485,7 +486,7 @@ void FeatureManager::setLineOrthInCamera(MatrixXd x)
         Vector4d line_orth = x.row(++feature_index);
         it_per_id.line_plucker = orth_to_plk(line_orth);// transfrom to camera frame
 
-        //ROS_INFO("feature id %d , start_frame %d, depth %f ", it_per_id->feature_id, it_per_id-> start_frame, it_per_id->estimated_depth);
+        //RCLCPP_INFO(rclcpp::get_logger("plvins"), "feature id %d , start_frame %d, depth %f ", it_per_id->feature_id, it_per_id-> start_frame, it_per_id->estimated_depth);
         /*
         if (it_per_id.estimated_depth < 0)
         {
@@ -508,7 +509,7 @@ MatrixXd FeatureManager::getLineOrthVector(Vector3d Ps[], Vector3d tic[], Matrix
 
         int imu_i = it_per_id.start_frame;
 
-        ROS_ASSERT(NUM_OF_CAM == 1);
+        PLVINS_ASSERT(NUM_OF_CAM == 1);
 
         Eigen::Vector3d twc = Ps[imu_i] + Rs[imu_i] * tic[0];   // twc = Rwi * tic + twi
         Eigen::Matrix3d Rwc = Rs[imu_i] * ric[0];               // Rwc = Rwi * Ric
@@ -535,7 +536,7 @@ void FeatureManager::setLineOrth(MatrixXd x,Vector3d P[], Matrix3d R[], Vector3d
         Vector6d line_w = orth_to_plk(line_orth_w);
 
         int imu_i = it_per_id.start_frame;
-        ROS_ASSERT(NUM_OF_CAM == 1);
+        PLVINS_ASSERT(NUM_OF_CAM == 1);
 
         Eigen::Vector3d twc = P[imu_i] + R[imu_i] * tic[0];   // twc = Rwi * tic + twi
         Eigen::Matrix3d Rwc = R[imu_i] * ric[0];               // Rwc = Rwi * Ric
@@ -543,7 +544,7 @@ void FeatureManager::setLineOrth(MatrixXd x,Vector3d P[], Matrix3d R[], Vector3d
         it_per_id.line_plucker = plk_from_pose(line_w, Rwc, twc); // transfrom to camera frame
         //it_per_id.line_plucker = line_w; // transfrom to camera frame
 
-        //ROS_INFO("feature id %d , start_frame %d, depth %f ", it_per_id->feature_id, it_per_id-> start_frame, it_per_id->estimated_depth);
+        //RCLCPP_INFO(rclcpp::get_logger("plvins"), "feature id %d , start_frame %d, depth %f ", it_per_id->feature_id, it_per_id-> start_frame, it_per_id->estimated_depth);
         /*
         if (it_per_id.estimated_depth < 0)
         {
@@ -592,7 +593,7 @@ void FeatureManager::triangulateLine(Vector3d Ps[], Vector3d tic[], Matrix3d ric
 
         int imu_i = it_per_id.start_frame, imu_j = imu_i - 1;
 
-        ROS_ASSERT(NUM_OF_CAM == 1);
+        PLVINS_ASSERT(NUM_OF_CAM == 1);
 
         Eigen::Vector3d t0 = Ps[imu_i] + Rs[imu_i] * tic[0];   // twc = Rwi * tic + twi
         Eigen::Matrix3d R0 = Rs[imu_i] * ric[0];               // Rwc = Rwi * Ric
@@ -894,7 +895,7 @@ void FeatureManager::triangulateLine(Vector3d Ps[], Vector3d tic[], Matrix3d ric
 
         int imu_i = it_per_id.start_frame, imu_j = imu_i - 1;
 
-        ROS_ASSERT(NUM_OF_CAM == 1);
+        PLVINS_ASSERT(NUM_OF_CAM == 1);
 
         Eigen::Vector3d t0 = Ps[imu_i] + Rs[imu_i] * tic[0];   // twc = Rwi * tic + twi
         Eigen::Matrix3d R0 = Rs[imu_i] * ric[0];               // Rwc = Rwi * Ric
@@ -1093,7 +1094,7 @@ void FeatureManager::triangulate(Vector3d Ps[], Vector3d tic[], Matrix3d ric[])
             continue;
         int imu_i = it_per_id.start_frame, imu_j = imu_i - 1;
 
-        ROS_ASSERT(NUM_OF_CAM == 1);
+        PLVINS_ASSERT(NUM_OF_CAM == 1);
         Eigen::MatrixXd svd_A(2 * it_per_id.feature_per_frame.size(), 4);
         int svd_idx = 0;
 
@@ -1122,7 +1123,7 @@ void FeatureManager::triangulate(Vector3d Ps[], Vector3d tic[], Matrix3d ric[])
             if (imu_i == imu_j)
                 continue;
         }
-        ROS_ASSERT(svd_idx == svd_A.rows());
+        PLVINS_ASSERT(svd_idx == svd_A.rows());
         Eigen::Vector4d svd_V = Eigen::JacobiSVD<Eigen::MatrixXd>(svd_A, Eigen::ComputeThinV).matrixV().rightCols<1>();
         double svd_method = svd_V[2] / svd_V[3];
         //it_per_id->estimated_depth = -b / A;
@@ -1141,7 +1142,7 @@ void FeatureManager::triangulate(Vector3d Ps[], Vector3d tic[], Matrix3d ric[])
 
 void FeatureManager::removeOutlier()
 {
-    ROS_BREAK();
+    throw std::runtime_error("invalid runtime state");
     int i = -1;
     for (auto it = feature.begin(), it_next = feature.begin();
          it != feature.end(); it = it_next)
@@ -1231,7 +1232,7 @@ void FeatureManager::removeLineOutlier(Vector3d Ps[], Vector3d tic[], Matrix3d r
 
         int imu_i = it_per_id->start_frame, imu_j = imu_i -1;
 
-        ROS_ASSERT(NUM_OF_CAM == 1);
+        PLVINS_ASSERT(NUM_OF_CAM == 1);
 
         Eigen::Vector3d twc = Ps[imu_i] + Rs[imu_i] * tic[0];   // twc = Rwi * tic + twi
         Eigen::Matrix3d Rwc = Rs[imu_i] * ric[0];               // Rwc = Rwi * Ric

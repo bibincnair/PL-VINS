@@ -1,66 +1,67 @@
+#include <plvins_common/ros.hpp>
 #pragma once
 
-#include <ros/ros.h>
-#include <std_msgs/Header.h>
-#include <std_msgs/Float32.h>
-#include <sensor_msgs/Imu.h>
-#include <sensor_msgs/PointCloud.h>
-#include <sensor_msgs/Image.h>
-#include <sensor_msgs/image_encodings.h>
-#include <nav_msgs/Path.h>
-#include <nav_msgs/Odometry.h>
-#include <geometry_msgs/PointStamped.h>
-#include <visualization_msgs/Marker.h>
-#include <tf/transform_broadcaster.h>
+
+#include <std_msgs/msg/header.hpp>
+#include <std_msgs/msg/float32.hpp>
+#include <sensor_msgs/msg/imu.hpp>
+#include <sensor_msgs/msg/point_cloud.hpp>
+#include <sensor_msgs/msg/image.hpp>
+#include <sensor_msgs/image_encodings.hpp>
+#include <nav_msgs/msg/path.hpp>
+#include <nav_msgs/msg/odometry.hpp>
+#include <geometry_msgs/msg/point_stamped.hpp>
+#include <visualization_msgs/msg/marker.hpp>
+#include <tf2_ros/transform_broadcaster.h>
 #include "CameraPoseVisualization.h"
-#include <eigen3/Eigen/Dense>
+#include <Eigen/Dense>
 #include "../estimator.h"
 #include "../parameters.h"
 #include <fstream>
 
-extern ros::Publisher pub_odometry;
-extern ros::Publisher pub_path, pub_pose;
-extern ros::Publisher pub_cloud, pub_map;
-extern ros::Publisher pub_key_poses;
+extern rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr pub_odometry;
+extern rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr pub_path;
 
-extern ros::Publisher pub_ref_pose, pub_cur_pose;
+extern rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr pub_key_poses;
 
-extern ros::Publisher pub_key;
 
-extern nav_msgs::Path path;
 
-extern ros::Publisher pub_pose_graph;
+
+
+extern nav_msgs::msg::Path path;
+
+extern rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr pub_pose_graph;
 
 extern int IMAGE_ROW, IMAGE_COL;
 
-void registerPub(ros::NodeHandle &n);
+void registerPub(const rclcpp::Node::SharedPtr &n);
 
-void pubLatestOdometry(const Eigen::Vector3d &P, const Eigen::Quaterniond &Q, const Eigen::Vector3d &V, const std_msgs::Header &header);
+void pubLatestOdometry(const Eigen::Vector3d &P, const Eigen::Quaterniond &Q, const Eigen::Vector3d &V, const std_msgs::msg::Header &header);
 
 void printStatistics(const Estimator &estimator, double t);
 
-void pubOdometry(const Estimator &estimator, const std_msgs::Header &header, Eigen::Vector3d loop_correct_t,
+void pubOdometry(const Estimator &estimator, const std_msgs::msg::Header &header, Eigen::Vector3d loop_correct_t,
                 Eigen::Matrix3d loop_correct_r);
 
-void pubInitialGuess(const Estimator &estimator, const std_msgs::Header &header);
+void pubInitialGuess(const Estimator &estimator, const std_msgs::msg::Header &header);
 
-void pubKeyPoses(const Estimator &estimator, const std_msgs::Header &header, Eigen::Vector3d loop_correct_t,
+void pubKeyPoses(const Estimator &estimator, const std_msgs::msg::Header &header, Eigen::Vector3d loop_correct_t,
 				Eigen::Matrix3d loop_correct_r);
 
-void pubCameraPose(const Estimator &estimator, const std_msgs::Header &header, Eigen::Vector3d loop_correct_t,
+void pubCameraPose(const Estimator &estimator, const std_msgs::msg::Header &header, Eigen::Vector3d loop_correct_t,
                    Eigen::Matrix3d loop_correct_r);
 
-void pubPointCloud(const Estimator &estimator, const std_msgs::Header &header, Eigen::Vector3d loop_correct_t,
+void pubPointCloud(const Estimator &estimator, const std_msgs::msg::Header &header, Eigen::Vector3d loop_correct_t,
                    Eigen::Matrix3d loop_correct_r);
 
-void pubLinesCloud(const Estimator &estimator, const std_msgs::Header &header, Eigen::Vector3d loop_correct_t,
+void pubLinesCloud(const Estimator &estimator, const std_msgs::msg::Header &header, Eigen::Vector3d loop_correct_t,
 				   Eigen::Matrix3d loop_correct_r);
 
-void pubPoseGraph(CameraPoseVisualization* posegraph, const std_msgs::Header &header);
+void pubPoseGraph(CameraPoseVisualization* posegraph, const std_msgs::msg::Header &header);
 
-void updateLoopPath(nav_msgs::Path _loop_path);
+void updateLoopPath(nav_msgs::msg::Path _loop_path);
 
-void pubTF(const Estimator &estimator, const std_msgs::Header &header, Eigen::Vector3d loop_correct_t,
+void pubTF(const Estimator &estimator, const std_msgs::msg::Header &header, Eigen::Vector3d loop_correct_t,
                    Eigen::Matrix3d loop_correct_r);
 
 void pubKeyframe(const Estimator &estimator);

@@ -1,79 +1,35 @@
-cmake_minimum_required(VERSION 2.8.3)
-project(plvins_estimator)
-
-set(CMAKE_BUILD_TYPE "Release")
-set(CMAKE_CXX_FLAGS "-std=c++11")
-#-DEIGEN_USE_MKL_ALL")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -g")
-
-find_package(catkin REQUIRED COMPONENTS
-    roscpp
-    std_msgs
-    geometry_msgs
-    nav_msgs
-    tf
-    cv_bridge
-    camera_model
-    )
-
-find_package(OpenCV REQUIRED)
-
-find_package(Ceres REQUIRED)
-
-include_directories(${catkin_INCLUDE_DIRS} ${CERES_INCLUDE_DIRS})
-
-set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
-find_package(Eigen3  REQUIRED)
-include_directories(
-  ${catkin_INCLUDE_DIRS}
-  ${EIGEN3_INCLUDE_DIR}
-)
-
-catkin_package()
-
-LIST(APPEND SOURCEFILES
-        src/parameters.cpp
-        src/feature_manager.cpp
-        src/factor/pose_local_parameterization.cpp
-        src/factor/projection_factor.cpp
-        src/factor/marginalization_factor.cpp
-        src/utility/utility.cpp
-        src/utility/visualization.cpp
-        src/utility/CameraPoseVisualization.cpp
-        src/initial/solve_5pts.cpp
-        src/initial/initial_aligment.cpp
-        src/initial/initial_sfm.cpp
-        src/initial/initial_ex_rotation.cpp
-        src/loop-closure/ThirdParty/DBoW/BowVector.cpp
-        src/loop-closure/ThirdParty/DBoW/FBrief.cpp
-        src/loop-closure/ThirdParty/DBoW/FeatureVector.cpp
-        src/loop-closure/ThirdParty/DBoW/QueryResults.cpp
-        src/loop-closure/ThirdParty/DBoW/ScoringObject.cpp
-        src/loop-closure/ThirdParty/DUtils/Random.cpp
-        src/loop-closure/ThirdParty/DUtils/Timestamp.cpp
-        src/loop-closure/ThirdParty/DVision/BRIEF.cpp
-        src/loop-closure/ThirdParty/VocabularyBinary.cpp
-        src/loop-closure/loop_closure.cpp
-        src/loop-closure/keyframe.cpp
-        src/loop-closure/keyframe_database.cpp
-
-        src/sophus/common.hpp
-        src/sophus/types.hpp
-        src/sophus/so3.hpp
-        src/utility/line_geometry.h
-        src/utility/line_geometry.cpp
-        src/factor/line_parameterization.h
-        src/factor/line_parameterization.cpp
-        src/factor/line_projection_factor.h
-        src/factor/line_projection_factor.cpp
-
-)
-ADD_LIBRARY(vinsEstimatorLib SHARED ${SOURCEFILES})
-TARGET_LINK_LIBRARIES(vinsEstimatorLib ${catkin_LIBRARIES} ${OpenCV_LIBS} ${CERES_LIBRARIES})
-
-add_executable(plvins_estimator
-        src/estimator_node.cpp
-        src/estimator.cpp
-        )
+cmake_minimum_required(VERSION 3.22)
+project(plvins_estimator VERSION 0.1.0 LANGUAGES CXX)
+include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/Dependencies.cmake)
+find_package(ament_cmake REQUIRED)
+find_package(plvins_common REQUIRED)
+find_package(camera_model REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(visualization_msgs REQUIRED)
+find_package(tf2_ros REQUIRED)
+find_package(cv_bridge REQUIRED)
+find_package(OpenCV 5.0.0 EXACT REQUIRED COMPONENTS core imgproc features calib geometry imgcodecs)
+find_package(Ceres 2.2.0 EXACT REQUIRED)
+file(GLOB factors CONFIGURE_DEPENDS src/factor/*.cpp)
+file(GLOB initial CONFIGURE_DEPENDS src/initial/*.cpp)
+add_library(vinsEstimatorLib SHARED src/parameters.cpp src/feature_manager.cpp ${factors} ${initial} src/utility/utility.cpp src/utility/visualization.cpp src/utility/CameraPoseVisualization.cpp src/utility/line_geometry.cpp)
+ament_target_dependencies(vinsEstimatorLib plvins_common camera_model rclcpp sensor_msgs std_msgs geometry_msgs nav_msgs visualization_msgs tf2_ros cv_bridge)
+target_link_libraries(vinsEstimatorLib Eigen3::Eigen Ceres::ceres ${OpenCV_LIBS})
+add_executable(plvins_estimator src/estimator_node.cpp src/estimator.cpp)
+ament_target_dependencies(plvins_estimator plvins_common camera_model rclcpp sensor_msgs std_msgs geometry_msgs nav_msgs visualization_msgs tf2_ros cv_bridge)
 target_link_libraries(plvins_estimator vinsEstimatorLib)
-
+install(TARGETS vinsEstimatorLib LIBRARY DESTINATION lib)
+install(TARGETS plvins_estimator DESTINATION lib/${PROJECT_NAME})
+install(DIRECTORY launch DESTINATION share/${PROJECT_NAME} FILES_MATCHING PATTERN "*.launch.py")
+install(DIRECTORY ../config/ DESTINATION share/${PROJECT_NAME}/config PATTERN "*.bag" EXCLUDE PATTERN "data" EXCLUDE)
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(geometry_test ../tests/geometry_test.cpp)
+  target_link_libraries(geometry_test vinsEstimatorLib)
+  ament_target_dependencies(geometry_test plvins_common camera_model rclcpp sensor_msgs std_msgs geometry_msgs nav_msgs visualization_msgs tf2_ros cv_bridge)
+endif()
+ament_package()

@@ -7,11 +7,11 @@
 #include <numeric>
 using namespace std;
 
-#include <eigen3/Eigen/Dense>
+#include <Eigen/Dense>
 using namespace Eigen;
 
-#include <ros/console.h>
-#include <ros/assert.h>
+
+
 
 #include "parameters.h"
 #include "utility/line_geometry.h"

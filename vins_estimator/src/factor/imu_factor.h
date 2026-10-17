@@ -1,13 +1,15 @@
+#include <plvins_common/ros.hpp>
 #pragma once
-#include <ros/assert.h>
+
 #include <iostream>
-#include <eigen3/Eigen/Dense>
+#include <Eigen/Dense>
 
 #include "../utility/utility.h"
 #include "../parameters.h"
 #include "integration_base.h"
 
 #include <ceres/ceres.h>
+#include "pose_local_parameterization.h"
 
 /*
    误差项： 15维
@@ -82,9 +84,9 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>
 
             if (pre_integration->jacobian.maxCoeff() > 1e8 || pre_integration->jacobian.minCoeff() < -1e8)
             {
-                ROS_WARN("numerical unstable in preintegration");
+                RCLCPP_WARN(rclcpp::get_logger("plvins"), "numerical unstable in preintegration");
                 //std::cout << pre_integration->jacobian << std::endl;
-///                ROS_BREAK();
+///                throw std::runtime_error("invalid runtime state");
             }
 
             if (jacobians[0])
@@ -108,9 +110,9 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>
 
                 if (jacobian_pose_i.maxCoeff() > 1e8 || jacobian_pose_i.minCoeff() < -1e8)
                 {
-                    ROS_WARN("numerical unstable in preintegration");
+                    RCLCPP_WARN(rclcpp::get_logger("plvins"), "numerical unstable in preintegration");
                     //std::cout << sqrt_info << std::endl;
-                    ROS_BREAK();
+                    throw std::runtime_error("invalid runtime state");
                 }
             }
             if (jacobians[1])
@@ -138,8 +140,8 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>
 
                 jacobian_speedbias_i = sqrt_info * jacobian_speedbias_i;
 
-                ROS_ASSERT(fabs(jacobian_speedbias_i.maxCoeff()) < 1e8);
-                ROS_ASSERT(fabs(jacobian_speedbias_i.minCoeff()) < 1e8);
+                PLVINS_ASSERT(fabs(jacobian_speedbias_i.maxCoeff()) < 1e8);
+                PLVINS_ASSERT(fabs(jacobian_speedbias_i.minCoeff()) < 1e8);
             }
             if (jacobians[2])
             {
@@ -157,8 +159,8 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>
 
                 jacobian_pose_j = sqrt_info * jacobian_pose_j;
 
-                ROS_ASSERT(fabs(jacobian_pose_j.maxCoeff()) < 1e8);
-                ROS_ASSERT(fabs(jacobian_pose_j.minCoeff()) < 1e8);
+                PLVINS_ASSERT(fabs(jacobian_pose_j.maxCoeff()) < 1e8);
+                PLVINS_ASSERT(fabs(jacobian_pose_j.minCoeff()) < 1e8);
             }
             if (jacobians[3])
             {
@@ -173,11 +175,15 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>
 
                 jacobian_speedbias_j = sqrt_info * jacobian_speedbias_j;
 
-                ROS_ASSERT(fabs(jacobian_speedbias_j.maxCoeff()) < 1e8);
-                ROS_ASSERT(fabs(jacobian_speedbias_j.minCoeff()) < 1e8);
+                PLVINS_ASSERT(fabs(jacobian_speedbias_j.maxCoeff()) < 1e8);
+                PLVINS_ASSERT(fabs(jacobian_speedbias_j.minCoeff()) < 1e8);
             }
         }
 
+        if (jacobians) {
+            if (jacobians[0]) liftPoseJacobian(parameters[0], jacobians[0], 15);
+            if (jacobians[2]) liftPoseJacobian(parameters[2], jacobians[2], 15);
+        }
         return true;
     }
 

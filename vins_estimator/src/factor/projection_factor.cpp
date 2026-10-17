@@ -1,3 +1,4 @@
+#include "pose_local_parameterization.h"
 #include "projection_factor.h"
 
 Eigen::Matrix2d ProjectionFactor::sqrt_info;
@@ -122,6 +123,11 @@ bool ProjectionFactor::Evaluate(double const *const *parameters, double *residua
     }
     sum_t += tic_toc.toc();
 
+    if (jacobians) {
+      if (jacobians[0]) liftPoseJacobian(parameters[0], jacobians[0], 2);
+      if (jacobians[1]) liftPoseJacobian(parameters[1], jacobians[1], 2);
+      if (jacobians[2]) liftPoseJacobian(parameters[2], jacobians[2], 2);
+    }
     return true;
 }
 

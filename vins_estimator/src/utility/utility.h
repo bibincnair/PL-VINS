@@ -3,7 +3,7 @@
 #include <cmath>
 #include <cassert>
 #include <cstring>
-#include <eigen3/Eigen/Dense>
+#include <Eigen/Dense>
 
 class Utility
 {
